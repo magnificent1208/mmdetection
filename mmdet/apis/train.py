@@ -7,8 +7,8 @@ import torch.distributed as dist
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import DistSamplerSeedHook, Runner
 
-from mmdet.core import (DistEvalHook, DistOptimizerHook, Fp16OptimizerHook,
-                        build_optimizer)
+from mmdet.core import (DistEvalHook, DistOptimizerHook, EvalHook,
+                        Fp16OptimizerHook, build_optimizer)
 from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.utils import get_root_logger
 
@@ -129,10 +129,14 @@ def _dist_train(model,
             seed=cfg.seed) for ds in dataset
     ]
     # put model on gpus
+    find_unused_parameters = cfg.get('find_unused_parameters', False)
+    # Sets the `find_unused_parameters` parameter in
+    # torch.nn.parallel.DistributedDataParallel
     model = MMDistributedDataParallel(
         model.cuda(),
         device_ids=[torch.cuda.current_device()],
-        broadcast_buffers=False)
+        broadcast_buffers=False,
+        find_unused_parameters=find_unused_parameters)
 
     # build runner
     optimizer = build_optimizer(model, cfg.optimizer)
@@ -184,11 +188,6 @@ def _non_dist_train(model,
                     logger=None,
                     timestamp=None,
                     meta=None):
-    if validate:
-        raise NotImplementedError('Built-in validation is not implemented '
-                                  'yet in not-distributed training. Use '
-                                  'distributed training or test.py and '
-                                  '*eval.py scripts instead.')
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
     data_loaders = [
@@ -196,12 +195,12 @@ def _non_dist_train(model,
             ds,
             cfg.data.imgs_per_gpu,
             cfg.data.workers_per_gpu,
-            cfg.gpus,
+            len(cfg.gpu_ids),
             dist=False,
             seed=cfg.seed) for ds in dataset
     ]
     # put model on gpus
-    model = MMDataParallel(model, device_ids=range(cfg.gpus)).cuda()
+    model = MMDataParallel(model.cuda(cfg.gpu_ids[0]), device_ids=cfg.gpu_ids)
 
     # build runner
     optimizer = build_optimizer(model, cfg.optimizer)
@@ -223,6 +222,18 @@ def _non_dist_train(model,
         optimizer_config = cfg.optimizer_config
     runner.register_training_hooks(cfg.lr_config, optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config)
+
+    # register eval hooks
+    if validate:
+        val_dataset = build_dataset(cfg.data.val, dict(test_mode=True))
+        val_dataloader = build_dataloader(
+            val_dataset,
+            imgs_per_gpu=1,
+            workers_per_gpu=cfg.data.workers_per_gpu,
+            dist=False,
+            shuffle=False)
+        eval_cfg = cfg.get('evaluation', {})
+        runner.register_hook(EvalHook(val_dataloader, **eval_cfg))
 
     if cfg.resume_from:
         runner.resume(cfg.resume_from)
