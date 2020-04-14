@@ -378,13 +378,15 @@ def main():
                     osp.splitext(args.out)[1])
                 mmcv.dump(outputs, args.out)
                 eval_types = args.eval
-                if cfg.dataset_type == 'VOCDataset':
+                if cfg.dataset_type == 'VOCDataset' or 'VHRDataset':
                     if eval_types:
                         for eval_type in eval_types:
                             if eval_type == 'bbox':
                                 test_dataset = mmcv.runner.obj_from_dict(
                                     cfg.data.test, datasets)
                                 logger = 'print' if args.summaries else None
+                                # import pdb as ipdb
+                                # ipdb.set_trace()
                                 mean_ap, eval_results = \
                                     voc_eval_with_return(
                                         args.out, test_dataset,
@@ -429,7 +431,7 @@ def main():
         prints = args.final_prints
         aggregate = args.final_prints_aggregate
 
-        if cfg.dataset_type == 'VOCDataset':
+        if cfg.dataset_type == 'VOCDataset' or 'VHRDataset':
             get_results(
                 eval_results_filename,
                 dataset='voc',

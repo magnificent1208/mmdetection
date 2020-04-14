@@ -89,13 +89,34 @@ def cityscapes_classes():
     ]
 
 
+def vhr_classes():
+    return [
+        'airplane', 'ship', 'storage tank', 'baseball diamond', 'tennis court',
+        'basketball court', 'ground track field', 'habor', 'bridge', 'vehicle'
+    ]
+
+
+def rsod_classes():
+    return [
+        'aircraft', 'playground', 'overpass', 'oiltank'
+    ]
+
+def vis_classes():
+    return [
+        'ignored regions', 'pedestrian','people', 'bicycle','car', 'van', 'truck', 
+        'tricycle', 'awning-tricycle', 'bus', 'motor', 'others'
+    ]
+
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
     'imagenet_det': ['det', 'imagenet_det', 'ilsvrc_det'],
     'imagenet_vid': ['vid', 'imagenet_vid', 'ilsvrc_vid'],
     'coco': ['coco', 'mscoco', 'ms_coco'],
     'wider_face': ['WIDERFaceDataset', 'wider_face', 'WDIERFace'],
-    'cityscapes': ['cityscapes']
+    'cityscapes': ['cityscapes'],
+    'vhr': ['vhr'],
+    'rsod': ['rsod'],
+    'vis': ['vis']
 }
 
 
