@@ -4,6 +4,7 @@ from mmcv import Config
 
 from mmdet.models import build_detector
 from mmdet.utils import get_model_complexity_info
+from mmdet.utils import quantize_net
 
 
 def parse_args():
