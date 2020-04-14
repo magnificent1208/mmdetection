@@ -181,6 +181,9 @@ class SSDHead(AnchorHead):
                                      -2).view(num_images, -1, 4)
         all_bbox_weights = torch.cat(bbox_weights_list,
                                      -2).view(num_images, -1, 4)
+        
+        # import pdb as ipdb
+        # ipdb.set_trace()
 
         # check NaN and Inf
         assert torch.isfinite(all_cls_scores).all().item(), \
@@ -198,4 +201,5 @@ class SSDHead(AnchorHead):
             all_bbox_weights,
             num_total_samples=num_total_pos,
             cfg=cfg)
+        print(losses_cls, losses_bbox)
         return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)

@@ -3,6 +3,7 @@ import argparse
 import copy
 import os
 import os.path as osp
+import subprocess
 import time
 
 import mmcv
@@ -30,10 +31,10 @@ def parse_args():
     parser.add_argument(
         '--gpus',
         type=int,
-        default=1,
+        default=8,
         help='number of gpus to use '
         '(only applicable to non-distributed training)')
-    parser.add_argument('--seed', type=int, default=None, help='random seed')
+    parser.add_argument('--seed', type=int, default=9999, help='random seed')
     parser.add_argument(
         '--deterministic',
         action='store_true',
@@ -48,6 +49,11 @@ def parse_args():
         '--autoscale-lr',
         action='store_true',
         help='automatically scale lr with the number of gpus')
+    parser.add_argument('--test', default=True, help='test after training')
+    parser.add_argument('--test_cmd', default='--eval mAP', help='test command')
+    parser.add_argument('--plot', default=True, help='plot loss after training')
+    parser.add_argument('--plot_key', default='loss')
+    parser.add_argument('--plot_sp', help='save path')
     args = parser.parse_args()
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
@@ -136,6 +142,21 @@ def main():
         validate=args.validate,
         timestamp=timestamp,
         meta=meta)
+    
+    if args.test:
+        model_path = cfg.work_dir + '/latest.pth'
+        test_cmd = 'python tools/test.py ' + args.config + ' ' + model_path + ' ' + args.test_cmd
+        test_process = subprocess.Popen(test_cmd, shell=True)
+    
+    if args.plot:
+        log_path = log_file + '.json'
+        key_cmd = ' --keys ' + args.plot_key
+        if args.plot_sp:
+            save_path = ' --out ./map/' + args.plot_sp
+        else:
+            save_path = ' --out ./map/' + timestamp + '.pdf'
+        plot_cmd = 'python tools/analyze_logs.py plot_curve ' + log_path + key_cmd + save_path
+        plot_process = subprocess.Popen(plot_cmd, shell=True)
 
 
 if __name__ == '__main__':
