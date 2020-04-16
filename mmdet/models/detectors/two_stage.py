@@ -172,6 +172,9 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
             rpn_outs = self.rpn_head(x)
             rpn_loss_inputs = rpn_outs + (gt_bboxes, img_metas,
                                           self.train_cfg.rpn)
+            if len(gt_bboxes[0]) == 0:
+                import pdb
+                pdb.set_trace()
             rpn_losses = self.rpn_head.loss(
                 *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
             losses.update(rpn_losses)

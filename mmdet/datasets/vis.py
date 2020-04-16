@@ -67,7 +67,7 @@ class VISDataset(XMLDataset):
                 h = bbox[3] - bbox[1]
                 if w < self.min_size or h < self.min_size:
                     ignore = True
-            if difficult or ignore:
+            if ignore:
                 bboxes_ignore.append(bbox)
                 labels_ignore.append(label)
             else:

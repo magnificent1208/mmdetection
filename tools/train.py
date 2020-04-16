@@ -32,12 +32,7 @@ def parse_args():
     group_gpus.add_argument(
         '--gpus',
         type=int,
-<<<<<<< HEAD
         default=8,
-        help='number of gpus to use '
-        '(only applicable to non-distributed training)')
-    parser.add_argument('--seed', type=int, default=9999, help='random seed')
-=======
         help='number of gpus to use '
         '(only applicable to non-distributed training)')
     group_gpus.add_argument(
@@ -46,8 +41,7 @@ def parse_args():
         nargs='+',
         help='ids of gpus to use '
         '(only applicable to non-distributed training)')
-    parser.add_argument('--seed', type=int, default=None, help='random seed')
->>>>>>> 25ede58af6072ea8089af7b42cbb418a3b6991e9
+    parser.add_argument('--seed', type=int, default=9999, help='random seed')
     parser.add_argument(
         '--deterministic',
         action='store_true',
