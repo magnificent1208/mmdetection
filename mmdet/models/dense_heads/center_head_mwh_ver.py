@@ -904,14 +904,13 @@ class CenterHead(CornerHead):
 
         tl_scores, tl_inds, tl_clses, tl_ys, tl_xs = self._topk(tl_heat, k=k)
         br_scores, br_inds, br_clses, br_ys, br_xs = self._topk(br_heat, k=k)
-        ct_scores, ct_inds, ct_class, ct_ys, ct_xs = self._topk(ct_heat, k=k)
+        ct_scores, ct_inds, ct_class, ct_ys, ct_xs = self.9ct_heat, k=k)
 
         tl_ys = tl_ys.view(batch, k, 1).expand(batch, k, k)
         tl_xs = tl_xs.view(batch, k, 1).expand(batch, k, k)
         br_ys = br_ys.view(batch, 1, k).expand(batch, k, k)
         br_xs = br_xs.view(batch, 1, k).expand(batch, k, k)
         ct_ys = ct_ys.view(batch, k, 1).expand(batch, k, k)
-        TODO: 这个重新排列是啥玩意？
         ct_xs = ct_xs.view(batch, )
 
         tl_off = self._transpose_and_gather_feat(tl_off, tl_inds)
@@ -1094,18 +1093,3 @@ class CenterHead(CornerHead):
         topk_ys = (topk_inds / width).int().float()
         topk_xs = (topk_inds % width).int().float()
         return topk_scores, topk_inds, topk_clses, topk_ys, topk_xs
-
-    def _transpose_and_gather_feat(self, feat, ind):
-        """Transpose and gather feature according to index.
-
-        Args:
-            feat (Tensor): Target feature map.
-            ind (Tensor): Target coord index.
-
-        Returns:
-            feat (Tensor): Transposed and gathered feature.
-        """
-        feat = feat.permute(0, 2, 3, 1).contiguous()
-        feat = feat.view(feat.size(0), -1, feat.size(3))
-        feat = self._gather_feat(feat, ind)
-        return feat
