@@ -898,21 +898,19 @@ class CenterHead(CornerHead):
         inp_h, inp_w, _ = img_meta['pad_shape']
 
         # perform nms on heatmaps
+        # 1. 使用默认3x3的卷积核筛选出所有局部（在卷积核范围内）最大的点作为候选点，减少计算量
+        # 2. 对heatmap进行topk排列，得到最可能为顶点的k个
+        # 3. 将所有的tl和br进行全排列的配对，分别计算每个框对应的匹配分数、特征
         tl_heat = self._local_maximum(tl_heat, kernel=kernel)
         br_heat = self._local_maximum(br_heat, kernel=kernel)
-        ct_heat = self._local_maximum(ct_heat, kernal=kernel)
 
         tl_scores, tl_inds, tl_clses, tl_ys, tl_xs = self._topk(tl_heat, k=k)
         br_scores, br_inds, br_clses, br_ys, br_xs = self._topk(br_heat, k=k)
-        ct_scores, ct_inds, ct_class, ct_ys, ct_xs = self._topk(ct_heat, k=k)
 
         tl_ys = tl_ys.view(batch, k, 1).expand(batch, k, k)
         tl_xs = tl_xs.view(batch, k, 1).expand(batch, k, k)
         br_ys = br_ys.view(batch, 1, k).expand(batch, k, k)
         br_xs = br_xs.view(batch, 1, k).expand(batch, k, k)
-        ct_ys = ct_ys.view(batch, k, 1).expand(batch, k, k)
-        TODO: 这个重新排列是啥玩意？
-        ct_xs = ct_xs.view(batch, )
 
         tl_off = self._transpose_and_gather_feat(tl_off, tl_inds)
         tl_off = tl_off.view(batch, k, 1, 2)
@@ -955,13 +953,35 @@ class CenterHead(CornerHead):
         br_xs -= x_off
         br_ys -= y_off
 
+        # 将小于等于0的参数置零
         tl_xs *= tl_xs.gt(0.0).type_as(tl_xs)
         tl_ys *= tl_ys.gt(0.0).type_as(tl_ys)
         br_xs *= br_xs.gt(0.0).type_as(br_xs)
         br_ys *= br_ys.gt(0.0).type_as(br_ys)
 
-        bboxes = torch.stack((tl_xs, tl_ys, br_xs, br_ys), dim=3)
+        bboxes = torch.stack((tl_xs, tl_ys, br_xs, br_ys), dim=3)  # shape (batch, k, k, 4)
         area_bboxes = ((br_xs - tl_xs) * (br_ys - tl_ys)).abs()
+
+        # 生成ct点的实际位置，格式和bboxes位置对应
+        TODO: 判断这里是否前后匹配，且能映射到原图对应的位置
+        ct_heat = self._local_maximum(ct_heat, kernal=kernel)
+        ct_scores, ct_inds, ct_class, ct_ys, ct_xs = self._topk(ct_heat, k=k)
+        ct_ys = ct_ys.view(batch, k, 1)
+        ct_xs = ct_xs.view(batch, k, 1)
+        ct_off = self._transpose_and_gather_feat(ct_off, ct_inds)
+        ct_off = ct_off.view(batch, k, 1, 2)
+        ct_xs = ct_xs + ct_off[..., 0]
+        ct_ys = ct_ys + ct_off[..., 0]
+
+        if with_centripetal_shift:
+            print('你这个写的不好使了，回来改center_triplets_head的976行')
+        
+        ct_xs *= (inp_w / width)
+        ct_ys *= (inp_h / height)
+        ct_xs -= x_off
+        xt_ys -= y_off
+        ct_xs *= ct_xs.gt(0.0).type_as(ct_xs) 
+        ct_ys *= ct_ys.gt(0.0).type_as(ct_ys)
 
         if with_centripetal_shift:
             tl_ctxs -= x_off
@@ -1051,6 +1071,27 @@ class CenterHead(CornerHead):
         clses = self._gather_feat(clses, inds).float()
 
         return bboxes, scores, clses
+
+    def _create_ct_bboxes(self, bboxes, n=3):
+        """根据bbox生成中心区域框
+
+        Args：
+            bboxes (Tensor [batch, k, k, 4]): 输入的所有默认候选框各顶点坐标
+            n (int): 分割的中心框占整体框的比例，default = 3
+        
+        Returns：
+            ct_bboxes (Tensor [batch, k, k, 4]): 计算得到的中心框各顶点坐标
+        """
+        batch, k, k_b, c = bboxes.shape()
+        assert: (k = k_b and c = 4), '输入bbox尺寸问题，检查_center_triplets_head的1077行'
+
+        ct_bboxes = torch.zeros_like(bboxes)
+        ct_bboxes[..., 0] += ((n+1)*bboxes[..., 0] + (n-1)*bboxes[..., 2]) / (2*n)
+        ct_bboxes[..., 1] += ((n+1)*bboxes[..., 1] + (n-1)*bboxes[..., 3]) / (2*n)
+        ct_bboxes[..., 2] += ((n-1)*bboxes[..., 0] + (n+1)*bboxes[..., 2]) / (2*n)
+        ct_bboxes[..., 3] += ((n+1)*bboxes[..., 1] + (n+1)*bboxes[..., 3]) / (2*n)
+
+        return ct_bboxes
 
     def _local_maximum(self, heat, kernel=3):
         """Extract local maximum pixel with given kernal.
