@@ -8,6 +8,10 @@ import numpy as np
 import cv2
 import math
 
+
+import sys
+sys.path.append("..")
+
 from mmdet.core import multi_apply, multiclass_nms, distance2bbox, force_fp32
 from ..builder import build_loss, HEADS
 from .corner_head import CornerHead
@@ -16,9 +20,12 @@ from .corner_head import CornerHead
 
 INF = 1e8
 
+#x = np.empty([1,2,3,3], dtype = int) 
+#print (x)
 
 @HEADS.register_module
 class CenterHead(CornerHead):
+
     """Head of CenterNet: Objects as Points
 
     Args:
@@ -79,26 +86,7 @@ class CenterHead(CornerHead):
         self.norm_cfg = norm_cfg
 
         self._init_layers()
-'''
-        self.num_classes = num_classes
-        # self.cls_out_channels = num_classes - 1
-        self.cls_out_channels = num_classes
-        self.in_channels = in_channels
-        self.feat_channels = feat_channels
-        self.stacked_convs = stacked_convs
-        self.strides = strides
-        self.regress_ranges = regress_ranges
-        self.featmap_sizes = None
-        self.loss_hm = build_loss(loss_hm)
-        self.loss_wh = build_loss(loss_wh)
-        self.loss_offset = build_loss(loss_offset)
-        self.conv_cfg = conv_cfg
-        self.norm_cfg = norm_cfg
-        self.fp16_enabled = False
-        self.use_cross = use_cross
-
-        self._init_layers()
-'''
+    
 
     def _init_layers(self):
         """Initialize layers for CenterHead.
@@ -171,6 +159,34 @@ class CenterHead(CornerHead):
         Args:
             feats (list[Tensor]): Features from the upstream network, each is
             a 4D-tensor.
+        
+        Returns:
+            tuple: Usually a tuple of corner heatmaps, offset heatmaps and
+            embedding heatmaps.
+
+        Returns:
+            tuple[Tensor]: A tuple of CenterHead's output for current feature
+            level. Containing the following Tensors:
+                - cls_score (Tensor): Predicted classes of input feature maps.
+                - wh_preds (Tensor): Predicted width&height of input feature maps.
+                - offset_pred (Tensor): Predicted center offset heatmap.
+                
+                - cls_score (list[Tensor]): Top-left corner heatmaps for all
+                  levels, each is a 4D-tensor, the channels number is
+                  num_classes.
+                - wh_pred (list[Tensor]): Bottom-right corner heatmaps for all
+                  levels, each is a 4D-tensor, the channels number is
+                  num_classes.
+                - offset_pred (list[Tensor]): Top-left offset heatmaps for all
+                  levels, each is a 4D-tensor. The channels number is
+                  corner_offset_channels.
+                - br_offs (list[Tensor]): Bottom-right offset heatmaps for all
+                  levels, each is a 4D-tensor. The channels number is
+                  corner_offset_channels.
+
+
+
+
         Returns:
             list: Center heatmaps, Offset heatmaps and .
             hm -- n*80*128*128   Peaks as Objects Center
@@ -178,37 +194,39 @@ class CenterHead(CornerHead):
             reg -- n*2*128*128   Boxes size(w,h)
 
         """
-        return multi_apply(self.forward_single, feats, self.scales)
+        lvl_ind = list(range(self.num_feat_levels))
+        return multi_apply(self.forward_single, feats, lvl_ind)
 
-    def forward_single(self, x, scales):
+    def forward_single(self, x, lvl_ind):
         """Forward feature of a single level.
         Args:
             x (Tensor): Feature of a single level.
-            scale (:obj: `mmcv.cnn.Scale`): Learnable scale module to resize
-                the bbox prediction.
-        Returns:
-            tuple: scores for each class, width&height predictions and center 
-                predictions of input feature maps.
+            lvl_ind (int): Level index of current feature.
 
+        Returns:
+            tuple[Tensor]: A tuple of CenterHead's output for current feature
+            level. Containing the following Tensors:
+                - cls_score (Tensor): Predicted classes of input feature maps.
+                - wh_preds (Tensor): Predicted width&height of input feature maps.
+                - offset_pred (Tensor): Predicted center offset heatmap.
         """
         cls_feat = x
         wh_feat = x
         offset_feat = x
 
         for cls_layer in self.cls_convs:
-            cls_feat = cls_layer(cls_feat)
-        cls_score = self.center_hm(cls_feat)
+            cls_feat = cls_layer[lvl_ind](cls_feat)
+        cls_score = self.center_hm[lvl_ind](cls_feat)
 
         for wh_layer in self.wh_convs:
-            wh_feat = wh_layer(wh_feat)
-        wh_pred = self.center_wh(wh_feat)
+            wh_feat = wh_layer[lvl_ind](wh_feat)
+        wh_pred = self.center_wh[lvl_ind](wh_feat)
         
         for offset_layer in self.offset_convs:
-            offset_feat = offset_layer(offset_feat)
-        offset_pred = self.center_offset(offset_feat)
+            offset_feat = offset_layer[lvl_ind](offset_feat)
+        offset_pred = self.center_offset[lvl_ind](offset_feat)
         
         return cls_score, wh_pred, offset_pred
-
 
 #沿用cornenet的 loss &single loss
     @force_fp32(apply_to=('cls_scores', 'wh_preds', 'offset_preds'))
@@ -328,7 +346,7 @@ class CenterHead(CornerHead):
               loss_wh = loss_wh,
               loss_offset = loss_offset)
               
-    def loss_single(self, tl_hmp, br_hmp,tl_off, br_off,
+    def loss_single(self, tl_hmp, br_hmp, tl_emb, br_emb, tl_off, br_off,
                     targets):
         """Compute losses for single level.
 
@@ -337,6 +355,10 @@ class CenterHead(CornerHead):
                 shape (N, num_classes, H, W).
             br_hmp (Tensor): Bottom-right corner heatmap for current level with
                 shape (N, num_classes, H, W).
+            tl_emb (Tensor): Top-left corner embedding for current level with
+                shape (N, corner_emb_channels, H, W).
+            br_emb (Tensor): Bottom-right corner embedding for current level
+                with shape (N, corner_emb_channels, H, W).
             tl_off (Tensor): Top-left corner offset for current level with
                 shape (N, corner_offset_channels, H, W).
             br_off (Tensor): Bottom-right corner offset for current level with
@@ -352,7 +374,55 @@ class CenterHead(CornerHead):
                 - push_loss (Tensor): Part two of AssociativeEmbedding loss.
                 - off_loss (Tensor): Corner offset loss.
         """
+        gt_tl_hmp = targets['topleft_heatmap']
+        gt_br_hmp = targets['bottomright_heatmap']
+        gt_tl_off = targets['topleft_offset']
+        gt_br_off = targets['bottomright_offset']
+        gt_embedding = targets['corner_embedding']
 
+        # Detection loss
+        tl_det_loss = self.loss_heatmap(
+            tl_hmp.sigmoid(),
+            gt_tl_hmp,
+            avg_factor=max(1,
+                           gt_tl_hmp.eq(1).sum()))
+        br_det_loss = self.loss_heatmap(
+            br_hmp.sigmoid(),
+            gt_br_hmp,
+            avg_factor=max(1,
+                           gt_br_hmp.eq(1).sum()))
+        det_loss = (tl_det_loss + br_det_loss) / 2.0
+
+        # AssociativeEmbedding loss
+        if self.with_corner_emb and self.loss_embedding is not None:
+            pull_loss, push_loss = self.loss_embedding(tl_emb, br_emb,
+                                                       gt_embedding)
+        else:
+            pull_loss, push_loss = None, None
+
+        # Offset loss
+        # We only compute the offset loss at the real corner position.
+        # The value of real corner would be 1 in heatmap ground truth.
+        # The mask is computed in class agnostic mode and its shape is
+        # batch * 1 * width * height.
+        tl_off_mask = gt_tl_hmp.eq(1).sum(1).gt(0).unsqueeze(1).type_as(
+            gt_tl_hmp)
+        br_off_mask = gt_br_hmp.eq(1).sum(1).gt(0).unsqueeze(1).type_as(
+            gt_br_hmp)
+        tl_off_loss = self.loss_offset(
+            tl_off,
+            gt_tl_off,
+            tl_off_mask,
+            avg_factor=max(1, tl_off_mask.sum()))
+        br_off_loss = self.loss_offset(
+            br_off,
+            gt_br_off,
+            br_off_mask,
+            avg_factor=max(1, br_off_mask.sum()))
+
+        off_loss = (tl_off_loss + br_off_loss) / 2.0
+
+        return det_loss, pull_loss, push_loss, off_loss
 
 
 #论文中peak extraction 的部分
@@ -405,6 +475,121 @@ class CenterHead(CornerHead):
 # 我们相当于在ind中记录了目标在heatmap上的地址索引，
 # 通过_tranpose_and_gather_feat以及
 # def _gather_feat(feat, ind, mask=None):函数得出我们预测的宽高。
+
+##Boxes 相关的还没改动
+    def get_bboxes(self,
+                   tl_heats,
+                   br_heats,
+                   tl_embs,
+                   br_embs,
+                   tl_offs,
+                   br_offs,
+                   img_metas,
+                   rescale=False,
+                   with_nms=True):
+        """Transform network output for a batch into bbox predictions.
+
+        Args:
+            tl_heats (list[Tensor]): Top-left corner heatmaps for each level
+                with shape (N, num_classes, H, W).
+            br_heats (list[Tensor]): Bottom-right corner heatmaps for each
+                level with shape (N, num_classes, H, W).
+            tl_embs (list[Tensor]): Top-left corner embeddings for each level
+                with shape (N, corner_emb_channels, H, W).
+            br_embs (list[Tensor]): Bottom-right corner embeddings for each
+                level with shape (N, corner_emb_channels, H, W).
+            tl_offs (list[Tensor]): Top-left corner offsets for each level
+                with shape (N, corner_offset_channels, H, W).
+            br_offs (list[Tensor]): Bottom-right corner offsets for each level
+                with shape (N, corner_offset_channels, H, W).
+            img_metas (list[dict]): Meta information of each image, e.g.,
+                image size, scaling factor, etc.
+            rescale (bool): If True, return boxes in original image space.
+                Default: False.
+            with_nms (bool): If True, do nms before return boxes.
+                Default: True.
+        """
+        assert tl_heats[-1].shape[0] == br_heats[-1].shape[0] == len(img_metas)
+        result_list = []
+        for img_id in range(len(img_metas)):
+            result_list.append(
+                self._get_bboxes_single(
+                    tl_heats[-1][img_id:img_id + 1, :],
+                    br_heats[-1][img_id:img_id + 1, :],
+                    tl_embs[-1][img_id:img_id + 1, :],
+                    br_embs[-1][img_id:img_id + 1, :],
+                    tl_offs[-1][img_id:img_id + 1, :],
+                    br_offs[-1][img_id:img_id + 1, :],
+                    img_metas[img_id],
+                    rescale=rescale,
+                    with_nms=with_nms))
+
+        return result_list
+
+    def get_bboxes_single(self,
+                        cls_scores,
+                        wh_preds,
+                        offset_preds,
+                        featmap_sizes,
+                        c, 
+                        s,
+                        scale_factor,
+                        cfg):
+        """Transform outputs for a single batch item into bbox predictions.
+
+        Args:
+            cls_scores (list[Tensor]): Box scores for a single scale level
+                Has shape (num_points * num_classes, H, W).
+            bbox_preds (list[Tensor]): Box energies / deltas for a single scale
+                level with shape (num_points * 4, H, W).
+
+
+            cfg (mmcv.Config): Test / postprocessing configuration,
+                if None, test_cfg would be used.
+
+        Returns:
+            Tensor: Labeled boxes in shape (n, 5), where the first 4 columns \
+                are bounding box positions (tl_x, tl_y, br_x, br_y) and the \
+                5-th column is a score between 0 and 1.
+        """
+
+        assert len(cls_scores) == len(wh_preds) == len(offset_preds) == len(featmap_sizes)
+        
+        detections = []
+        for cls_score, wh_pred, offset_pred, featmap_size in zip(
+                cls_scores, wh_preds, offset_preds, featmap_sizes): # 取出每一层的点
+            assert cls_score.size()[-2:] == wh_pred.size()[-2:] == offset_pred.size()[-2:] == featmap_size
+            
+            output_h, output_w = featmap_size
+            #实际上得到了每一层的hm, wh, offset
+            hm = torch.clamp(cls_score.sigmoid_(), min=1e-4, max=1-1e-4).unsqueeze(0) # 增加一个纬度
+            #wh_pred[0, :, :] = wh_pred[0, :, :] * output_w
+            #wh_pred[1, :, :] = wh_pred[1, :, :] * output_h # 2, output_h, output_w
+            wh = wh_pred.unsqueeze(0) # 这里需要乘以featuremap的尺度
+            #offset_pred[0, : ,:] =  offset_pred[0, : ,:] * output_w
+            #offset_pred[1, : ,:] =  offset_pred[1, : ,:] * output_h
+            reg = offset_pred.unsqueeze(0)
+            
+            dets = ctdet_decode(hm, wh, reg=reg, K=100)
+            dets = post_process(dets, c, s, output_h, output_w, scale=scale_factor, num_classes=self.num_classes)
+            detections.append(dets)
+        
+        results = merge_outputs(detections, self.num_classes) # 单张图的结果
+
+        return results
+
+    def _bboxes_nms(self, bboxes, labels, cfg):
+        out_bboxes, keep = batched_nms(bboxes[:, :4], bboxes[:, -1], labels,
+                                       cfg.nms_cfg)
+        out_labels = labels[keep]
+
+        if len(out_bboxes) > 0:
+            idx = torch.argsort(out_bboxes[:, -1], descending=True)
+            idx = idx[:cfg.max_per_img]
+            out_bboxes = out_bboxes[idx]
+            out_labels = out_labels[idx]
+
+        return out_bboxes, out_labels
 
     def _gather_feat(self, feat, ind, mask=None):
         """Gather feature according to index.
@@ -459,7 +644,7 @@ class CenterHead(CornerHead):
         Args:
             heat (Tensor): heatmap for current level with
                 shape (N, num_classes, H, W).
-            ｗｈ(Tensor): width and height of bbox #也可以理解为中心点的宽高
+            wｈ(Tensor): width and height of bbox #也可以理解为中心点的宽高
             reg (Tensor): center point offset for current level with
                 shape (N, corner_offset_channels, H, W). #关键点量化误差补偿　offset
             img_meta (dict): Meta information of current image, e.g.,
@@ -483,7 +668,7 @@ class CenterHead(CornerHead):
         # perform nms on heatmaps
         heat = self._local_maximum(heat, kernel=kernel)
 
-        scores, inds, clses, ys, xs = self._topk(heat,  k=k)
+        scores, inds, clses, ys, xs = self._topk(heat, K=K)
         # xs、ys是inds转化成在heat_map上面的行、列
 
         #如果用了关键点量化误差补偿，则解码并加到先前的结果上
@@ -498,25 +683,19 @@ class CenterHead(CornerHead):
 
         wh = self._transpose_and_gather_feat(wh, inds) # inds 对应 h, w的尺度
         wh = wh.view(batch, K, 2)
-'''
-    if cat_spec_wh:
-        wh = wh.view(batch, K, cat, 2)
-        clses_ind = clses.view(batch, K, 1, 1).expand(batch, K, 1, 2).long()
-        wh = wh.gather(2, clses_ind).view(batch, K, 2)
-    else:
-        wh = wh.view(batch, K, 2)
-'''        
-    clses  = clses.view(batch, K, 1).float()
-    scores = scores.view(batch, K, 1) # 0, 1, 2
-    
-    bboxes = torch.cat([xs - wh[..., 0:1] / 2, 
+      
+        clses  = clses.view(batch, K, 1).float()
+        scores = scores.view(batch, K, 1) # 0, 1, 2
+        bboxes = torch.cat([xs - wh[..., 0:1] / 2, 
                         ys - wh[..., 1:2] / 2,
                         xs + wh[..., 0:1] / 2, 
                         ys + wh[..., 1:2] / 2], dim=2)
 
-
+        return bboxes, scores, clses
 
 '''
     detections = torch.cat([bboxes, scores, clses], dim=2)
     return detections    
 '''
+
+
