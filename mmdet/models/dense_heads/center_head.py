@@ -1,62 +1,33 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from mmcv.cnn import Scale, normal_init
-
+from mmcv.cnn import normal_init
 import numpy as np
 import cv2
 import math
 
 
-import sys
-sys.path.append("..")
-
 from mmdet.core import multi_apply, multiclass_nms, distance2bbox, force_fp32
 from ..builder import build_loss, HEADS
+from mmcv.cnn import ConvModule, Scale, bias_init_with_prob, normal_init
+from ..utils import gaussian_radius, gen_gaussian_target
 from .corner_head import CornerHead
-
-# from ..utils import bias_init_with_prob, Scale, ConvModule
 
 INF = 1e8
 
-#x = np.empty([1,2,3,3], dtype = int) 
-#print (x)
 
 @HEADS.register_module
-class CenterHead(CornerHead):
+class CenterHead(nn.Module):
 
-    """Head of CenterNet: Objects as Points
-
-    Args:
-        num_classes (int): Number of detect classes. (Including background)
-        in_channels (int):
-        feat_channels (int): Number of hidden channels. Used in child classes.
-        stacked_convs (int): Number of conv layers in cls and reg tower.
-            Default: 4.
-        strides (tuple): Downsample factor of each feature map.
-        regress_ranges (tuple[tuple[int, int]]): Regress range of multiple
-            level points.        
-        train_cfg (dict | None): Training config. Useless in CenterHead,
-            but we keep this variable for SingleStageDetector. Default: None.
-        test_cfg (dict | None): Testing config of CenterHead. Default: None.
-        loss_heatmap (dict | None): Config of center heatmap loss. Default:
-            GaussianFocalLoss. #这里跟cornernet是完全一样的 alpha和gamma参数也是一样
-        loss_offset (dict | None): Config of center offset loss. Default:
-            SmoothL1Loss.
-
-    """
     def __init__(self,
                  num_classes, # init 80
                  in_channels,
-                 feat_channels=256,                 
+                 feat_channels=256,
                  stacked_convs=1,
                  strides=(4, 8, 16, 32, 64),
                  regress_ranges=((-1, 64), (64, 128), (128, 256), (256, 512),
                                  (512, INF)),
-                 train_cfg=None,
-                 test_cfg=None,
-                 loss_heatmap=dict(
+                 use_cross = False,
+                 loss_hm = dict(
                      type='GaussianFocalLoss',
                      alpha=2.0,
                      gamma=4.0,
@@ -65,32 +36,47 @@ class CenterHead(CornerHead):
                      type="SmoothL1Loss",
                      loss_weight=0.1),
                  loss_offset=dict(
-                     type='SmoothL1Loss', beta=1.0, loss_weight=1),
+                     type='SmoothL1Loss', 
+                     beta=1.0, 
+                     loss_weight=1),
                  conv_cfg=None,
-                 norm_cfg=dict(type='GN', num_groups=32, requires_grad=True)):
+                 norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
+                 **kwargs):
         super(CenterHead, self).__init__()
+            # num_classes, 
+            # in_channels,
+            # feat_channels,
+            # stacked_convs,
+            # strides,
+            # regress_ranges,
+            # use_cross,
+            # loss_hm,
+            # loss_wh,
+            # loss_offset,
+            # conv_cfg,
+            # norm_cfg,
+            # **kwargs)
+
         self.num_classes = num_classes
+        # self.cls_out_channels = num_classes - 1
+        self.cls_out_channels = num_classes
         self.in_channels = in_channels
-        self.num_feat_levels = num_feat_levels
+        self.feat_channels = feat_channels
         self.stacked_convs = stacked_convs
         self.strides = strides
         self.regress_ranges = regress_ranges
-        self.loss_heatmap = build_loss(
-            loss_heatmap) if loss_heatmap is not None else None
+        self.featmap_sizes = None
+        self.loss_hm = build_loss(loss_hm)
         self.loss_wh = build_loss(loss_wh)
-        self.loss_offset = build_loss(
-            loss_offset) if loss_offset is not None else None
-        self.train_cfg = train_cfg
-        self.test_cfg = test_cfg
+        self.loss_offset = build_loss(loss_offset)
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+        self.fp16_enabled = False
+        self.use_cross = use_cross
 
         self._init_layers()
-    
 
     def _init_layers(self):
-        """Initialize layers for CenterHead.
-        """
         self.cls_convs = nn.ModuleList()
         self.wh_convs = nn.ModuleList()
         self.offset_convs = nn.ModuleList()
@@ -132,103 +118,34 @@ class CenterHead(CornerHead):
         self.scales = nn.ModuleList([Scale(1.0) for _ in self.strides])
 
     def init_weights(self):
-        """Initialize weights of the head."""
 
         self.center_hm.bias.data.fill_(-2.19)
         nn.init.constant_(self.center_wh.bias, 0)
         nn.init.constant_(self.center_offset.bias, 0)
 
-# mmdv2 style refer to atss_head 但是不知道为啥不好使
-#         for m in self.cls_convs:
-#             normal_init(m.conv, std=0.01)
-#         for m in self.wh_convs:
-#             normal_init(m.conv, std=0.01)
-#         for m in self.offset_convs:
-#             normal_init(m.conv, std=0.01)
-            
-        #bias_hm = bias_init_with_prob(0.01) # 这里的初始化？
-        #normal_init(self.center_hm, std=0.01, bias=bias_hm)
-#         normal_init(self.center_hm, std=0.01)
-#         normal_init(self.center_wh, std=0.01)
-#         normal_init(self.center_offset, std=0.01)
 
     def forward(self, feats):
-        """Forward features from the upstream network.
-        more details on Centernet_network.png 
+        return multi_apply(self.forward_single, feats, self.scales)
 
-        Args:
-            feats (list[Tensor]): Features from the upstream network, each is
-            a 4D-tensor.
-        
-        Returns:
-            tuple: Usually a tuple of corner heatmaps, offset heatmaps and
-            embedding heatmaps.
-
-        Returns:
-            tuple[Tensor]: A tuple of CenterHead's output for current feature
-            level. Containing the following Tensors:
-                - cls_score (Tensor): Predicted classes of input feature maps.
-                - wh_preds (Tensor): Predicted width&height of input feature maps.
-                - offset_pred (Tensor): Predicted center offset heatmap.
-                
-                - cls_score (list[Tensor]): Top-left corner heatmaps for all
-                  levels, each is a 4D-tensor, the channels number is
-                  num_classes.
-                - wh_pred (list[Tensor]): Bottom-right corner heatmaps for all
-                  levels, each is a 4D-tensor, the channels number is
-                  num_classes.
-                - offset_pred (list[Tensor]): Top-left offset heatmaps for all
-                  levels, each is a 4D-tensor. The channels number is
-                  corner_offset_channels.
-                - br_offs (list[Tensor]): Bottom-right offset heatmaps for all
-                  levels, each is a 4D-tensor. The channels number is
-                  corner_offset_channels.
-
-
-
-
-        Returns:
-            list: Center heatmaps, Offset heatmaps and .
-            hm -- n*80*128*128   Peaks as Objects Center
-            wh -- n*2*128*128    Center offsets(ox,oy)
-            reg -- n*2*128*128   Boxes size(w,h)
-
-        """
-        lvl_ind = list(range(self.num_feat_levels))
-        return multi_apply(self.forward_single, feats, lvl_ind)
-
-    def forward_single(self, x, lvl_ind):
-        """Forward feature of a single level.
-        Args:
-            x (Tensor): Feature of a single level.
-            lvl_ind (int): Level index of current feature.
-
-        Returns:
-            tuple[Tensor]: A tuple of CenterHead's output for current feature
-            level. Containing the following Tensors:
-                - cls_score (Tensor): Predicted classes of input feature maps.
-                - wh_preds (Tensor): Predicted width&height of input feature maps.
-                - offset_pred (Tensor): Predicted center offset heatmap.
-        """
+    def forward_single(self, x, scale):
         cls_feat = x
         wh_feat = x
         offset_feat = x
 
         for cls_layer in self.cls_convs:
-            cls_feat = cls_layer[lvl_ind](cls_feat)
-        cls_score = self.center_hm[lvl_ind](cls_feat)
+            cls_feat = cls_layer(cls_feat)
+        cls_score = self.center_hm(cls_feat)
 
         for wh_layer in self.wh_convs:
-            wh_feat = wh_layer[lvl_ind](wh_feat)
-        wh_pred = self.center_wh[lvl_ind](wh_feat)
+            wh_feat = wh_layer(wh_feat)
+        wh_pred = self.center_wh(wh_feat)
         
         for offset_layer in self.offset_convs:
-            offset_feat = offset_layer[lvl_ind](offset_feat)
-        offset_pred = self.center_offset[lvl_ind](offset_feat)
+            offset_feat = offset_layer(offset_feat)
+        offset_pred = self.center_offset(offset_feat)
         
         return cls_score, wh_pred, offset_pred
 
-#沿用cornenet的 loss &single loss
     @force_fp32(apply_to=('cls_scores', 'wh_preds', 'offset_preds'))
     def loss(self,
              cls_scores,
@@ -239,37 +156,11 @@ class CenterHead(CornerHead):
              img_metas,
              cfg,
              gt_bboxes_ignore=None):
-        """Compute loss of the head.
 
-        Args:
-            cls_scores (list[Tensor]): Box scores for each scale level,
-                each is a 4D-tensor, the channel number is
-                num_points * num_classes.
-            wh_preds (list[Tensor]): Box energies / deltas for each scale
-                level, each is a 4D-tensor, the channel number is
-                num_points * 4.
-            offset_preds (list[Tensor]): Centerss for each scale level, each
-                is a 4D-tensor, the channel number is num_points * 1.
-            gt_bboxes (list[Tensor]): Ground truth bboxes for each image with
-                shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels (list[Tensor]): class indices corresponding to each box
-            img_metas (list[dict]): Meta information of each image, e.g.,
-                image size, scaling factor, etc.
-            gt_bboxes_ignore (None | list[Tensor]): specify which bounding
-                boxes can be ignored when computing the loss.
-
-        Returns:
-            tuple[torch.Tensor]: Losses of the head's differnet branches
-            containing the following losses:
-
-                - det_loss (Tensor): Corner keypoint loss.
-                - pull_loss (Tensor): Part one of AssociativeEmbedding loss.
-                - push_loss (Tensor): Part two of AssociativeEmbedding loss.
-                - loss_offset (Tensor): Center offset loss.
-        """
         assert len(cls_scores) == len(wh_preds) == len(offset_preds)
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         self.featmap_sizes = featmap_sizes
+        
         all_level_points = self.get_points(featmap_sizes, offset_preds[0].dtype,
                                             offset_preds[0].device)
 
@@ -279,7 +170,7 @@ class CenterHead(CornerHead):
 
         num_imgs = cls_scores[0].size(0) # batch_size
 
-        # flatten cls_scores, wh_preds and offset_preds
+        # flatten cls_scores, bbox_preds and centerness
         flatten_cls_scores = [
             cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
             for cls_score in cls_scores
@@ -345,186 +236,241 @@ class CenterHead(CornerHead):
               loss_hm = loss_hm,
               loss_wh = loss_wh,
               loss_offset = loss_offset)
-              
-    def loss_single(self, tl_hmp, br_hmp, tl_emb, br_emb, tl_off, br_off,
-                    targets):
-        """Compute losses for single level.
 
+    def get_points(self, featmap_sizes, dtype, device):
+        """Get points according to feature map sizes.
         Args:
-            tl_hmp (Tensor): Top-left corner heatmap for current level with
-                shape (N, num_classes, H, W).
-            br_hmp (Tensor): Bottom-right corner heatmap for current level with
-                shape (N, num_classes, H, W).
-            tl_emb (Tensor): Top-left corner embedding for current level with
-                shape (N, corner_emb_channels, H, W).
-            br_emb (Tensor): Bottom-right corner embedding for current level
-                with shape (N, corner_emb_channels, H, W).
-            tl_off (Tensor): Top-left corner offset for current level with
-                shape (N, corner_offset_channels, H, W).
-            br_off (Tensor): Bottom-right corner offset for current level with
-                shape (N, corner_offset_channels, H, W).
-            targets (dict): Corner target generated by `get_targets`.
-
+            featmap_sizes (list[tuple]): Multi-level feature map sizes.
+            dtype (torch.dtype): Type of points.
+            device (torch.device): Device of points.
         Returns:
-            tuple[torch.Tensor]: Losses of the head's differnet branches
-            containing the following losses:
-
-                - det_loss (Tensor): Corner keypoint loss.
-                - pull_loss (Tensor): Part one of AssociativeEmbedding loss.
-                - push_loss (Tensor): Part two of AssociativeEmbedding loss.
-                - off_loss (Tensor): Corner offset loss.
+            tuple: points of each image.
         """
-        gt_tl_hmp = targets['topleft_heatmap']
-        gt_br_hmp = targets['bottomright_heatmap']
-        gt_tl_off = targets['topleft_offset']
-        gt_br_off = targets['bottomright_offset']
-        gt_embedding = targets['corner_embedding']
+        mlvl_points = []
+        for i in range(len(featmap_sizes)):
+            mlvl_points.append(
+                self.get_points_single(featmap_sizes[i], self.strides[i],
+                                       dtype, device))
+        return mlvl_points
 
-        # Detection loss
-        tl_det_loss = self.loss_heatmap(
-            tl_hmp.sigmoid(),
-            gt_tl_hmp,
-            avg_factor=max(1,
-                           gt_tl_hmp.eq(1).sum()))
-        br_det_loss = self.loss_heatmap(
-            br_hmp.sigmoid(),
-            gt_br_hmp,
-            avg_factor=max(1,
-                           gt_br_hmp.eq(1).sum()))
-        det_loss = (tl_det_loss + br_det_loss) / 2.0
+    def get_points_single(self, featmap_size, stride, dtype, device):
+        h, w = featmap_size
+        x_range = torch.arange(
+            0, w * stride, stride, dtype=dtype, device=device) # 以一定间隔取x的值
+        y_range = torch.arange(
+            0, h * stride, stride, dtype=dtype, device=device)
+        y, x = torch.meshgrid(y_range, x_range) # 得到featmap的所有点
+        points = torch.stack(
+            (x.reshape(-1), y.reshape(-1)), dim=-1) + stride // 2
+        return points
 
-        # AssociativeEmbedding loss
-        if self.with_corner_emb and self.loss_embedding is not None:
-            pull_loss, push_loss = self.loss_embedding(tl_emb, br_emb,
-                                                       gt_embedding)
-        else:
-            pull_loss, push_loss = None, None
+    def center_target(self, gt_bboxes_list, gt_labels_list, img_metas, all_level_points):
 
-        # Offset loss
-        # We only compute the offset loss at the real corner position.
-        # The value of real corner would be 1 in heatmap ground truth.
-        # The mask is computed in class agnostic mode and its shape is
-        # batch * 1 * width * height.
-        tl_off_mask = gt_tl_hmp.eq(1).sum(1).gt(0).unsqueeze(1).type_as(
-            gt_tl_hmp)
-        br_off_mask = gt_br_hmp.eq(1).sum(1).gt(0).unsqueeze(1).type_as(
-            gt_br_hmp)
-        tl_off_loss = self.loss_offset(
-            tl_off,
-            gt_tl_off,
-            tl_off_mask,
-            avg_factor=max(1, tl_off_mask.sum()))
-        br_off_loss = self.loss_offset(
-            br_off,
-            gt_br_off,
-            br_off_mask,
-            avg_factor=max(1, br_off_mask.sum()))
+        assert len(self.featmap_sizes) == len(self.regress_ranges)
 
-        off_loss = (tl_off_loss + br_off_loss) / 2.0
+        # get heatmaps and targets of each image
+        # heatmaps in heatmaps_list: [num_points, 80]
+        # wh_targets: [num_points, 2] => [batch_size, num_points, 2]
+        heatmaps_list, wh_targets_list, offset_targets_list = multi_apply(
+            self.center_target_single,
+            gt_bboxes_list,
+            gt_labels_list,
+            img_metas
+            )
 
-        return det_loss, pull_loss, push_loss, off_loss
-
-
-#论文中peak extraction 的部分
-    def _local_maximum(self, heat, kernel=3):
-        """Extract local maximum pixel with given kernal.
-
-        Args:
-            heat (Tensor): Target heatmap.
-            kernel (int): Kernel size of max pooling. Default: 3.
-
-        Returns:
-            heat (Tensor): A heatmap where local maximum pixels maintain its
-                own value and other positions are 0.
-        """
-     
-        pad = (kernel - 1) // 2
-        hmax = F.max_pool2d(heat, kernel, stride=1, padding=pad)
-        keep = (hmax == heat).float()
-        return heat * keep
-
-    def _topk(self, scores, k=100):
-        """Get top k positions from heatmap.
-
-        Args:
-            scores (Tensor): Target heatmap with shape
-                [batch, num_classes, height, width].
-            k (int): Target number. Default: 100. 因为centernet原文写的是100所以这里填这个数，以调用的时候实际传入的为主，可以多尝试几个数
-
-        Returns:
-            tuple[torch.Tensor]: Scores, indexes, categories and coords of
-                topk keypoint. Containing following Tensors:
-
-            - topk_scores (Tensor): Max scores of each topk keypoint. 对应值维度 n*80*K
-            - topk_inds (Tensor): Indexes of each topk keypoint. 对应的索引维度是n*80*K
-            - topk_clses (Tensor): Categories of each topk keypoint.
-            - topk_ys (Tensor): Y-coord of each topk keypoint.   对应的维度是n*80*K
-            - topk_xs (Tensor): X-coord of each topk keypoint.   对应的维度是n*80*K
+        # split to per img, per level
+        num_points = [center.size(0) for center in all_level_points] # 每一层多少个点 all_level_points [[12414, 2], []]
         
-        **cat -- 80 num_classes
+        heatmaps_list = [heatmaps.split(num_points, 0) for heatmaps in heatmaps_list]
+        wh_targets_list = [wh_targets.split(num_points, 0) for wh_targets in wh_targets_list]
+        offset_targets_list = [offset_targets.split(num_points, 0) for offset_targets in offset_targets_list]
+
+        # concat per level image, 同一层的concat # [(batch_size，featmap_size[1]), ...)
+        concat_lvl_heatmaps = []
+        concat_lvl_wh_targets = []
+        concat_lvl_offset_targets = []
+        num_levels = len(self.featmap_sizes)
+        for i in range(num_levels):
+            concat_lvl_heatmaps.append(
+                torch.cat([heatmaps[i] for heatmaps in heatmaps_list])) # (num_levels, batch_size * w * h, 80)
+            concat_lvl_wh_targets.append(
+                torch.cat(
+                    [wh_targets[i] for wh_targets in wh_targets_list]))
+            concat_lvl_offset_targets.append(
+                torch.cat(
+                    [offset_targets[i] for offset_targets in offset_targets_list]))
+        return concat_lvl_heatmaps, concat_lvl_wh_targets, concat_lvl_offset_targets
+
+
+    def center_target_single(self, gt_bboxes, gt_labels, img_meta):
         """
-        batch, _, height, width = scores.size()
-        topk_scores, topk_inds = torch.topk(scores.view(batch, -1), k)
-        topk_clses = (topk_inds / (height * width)).int()
-        topk_inds = topk_inds % (height * width)
-        topk_ys = (topk_inds / width).int().float()
-        topk_xs = (topk_inds % width).int().float()
-        return topk_scores, topk_inds, topk_clses, topk_ys, topk_xs
-        #得到每张图片最大的Ｋ个值，有８０个类　所以８０个ｈｍｐ通道
+        single image
+        gt_bboxes:torch.Size([6, 4])
+        gt_labels:torch.Size([6]) tensor([34, 34, 34, 34, 34, 34], device='cuda:0')
+        featmap_sizes:(list[tuple]): Multi-level feature map sizes.
+        regress_ranges=((-1, 64), (64, 128), (128, 256), (256, 512),(512, INF))
+        """
+        # transform the gt_bboxes, gt_labels to numpy
+        gt_bboxes = gt_bboxes.data.cpu().numpy()
+        gt_labels = gt_labels.data.cpu().numpy()
+        
+        num_objs = gt_labels.shape[0]
 
-# 我们相当于在ind中记录了目标在heatmap上的地址索引，
-# 通过_tranpose_and_gather_feat以及
-# def _gather_feat(feat, ind, mask=None):函数得出我们预测的宽高。
+        # heatmaps [level1, level2, level3, level4, level5]
+        num_levels = len(self.featmap_sizes)
 
-##Boxes 相关的还没改动
+        heatmaps_targets = []
+        wh_targets = []
+        offset_targets = []
+        # get the target shape for each image
+        for i in range(num_levels):
+            h, w = self.featmap_sizes[i]
+            hm = np.zeros((self.cls_out_channels, h, w), dtype=np.float32)
+            heatmaps_targets.append(hm)
+            wh = np.zeros((h, w, 2), dtype=np.float32)
+            wh_targets.append(wh)
+            offset = np.zeros((h, w, 2), dtype=np.float32)
+            offset_targets.append(offset)
+
+        for k in range(num_objs):
+            bbox = gt_bboxes[k]
+            cls_id = gt_labels[k]
+            
+            if img_meta['flipped']:
+                bbox[[0, 2]] = img_meta['width'] - bbox[[2, 0]] - 1
+                
+            # condition: in the regress_ranges
+            origin_h, origin_w = bbox[3] - bbox[1], bbox[2] - bbox[0]
+            #max_h_w = max(h, w) / 2
+            max_h_w = max(origin_h, origin_w)
+            #max_h_w = max(origin_h, origin_w) * 2 # 最长边为32在P2
+            # 根据max_h_w在哪一层将output设置为当前层的
+            index_levels = []
+            #index_level = 0
+            for i in range(num_levels):
+                min_regress_distance, max_regress_distance = self.regress_ranges[i]
+                if not self.use_cross and (max_h_w > min_regress_distance) and (max_h_w <= max_regress_distance):
+                    index_levels.append(i)
+                    break
+                
+                if self.use_cross:
+                    min_regress_distance = min_regress_distance * 0.8
+                    max_regress_distance = max_regress_distance * 1.3
+                    if (max_h_w > min_regress_distance) and (max_h_w <= max_regress_distance):
+                        index_levels.append(i)
+                    
+            for index_level in index_levels:
+                output_h, output_w = self.featmap_sizes[index_level]
+                #print(output_h, output_w)
+                hm = heatmaps_targets[index_level]
+                wh = wh_targets[index_level]
+                offset = offset_targets[index_level]
+            
+                # c, s is passed by meta
+                trans_output = get_affine_transform(img_meta['c'], img_meta['s'], 0, [output_w, output_h])
+                bbox[:2] = affine_transform(bbox[:2], trans_output)
+                bbox[2:] = affine_transform(bbox[2:], trans_output)
+                bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, output_w - 1) #x1, x2
+                bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, output_h - 1)
+                h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
+                #print(h, w)
+                # 转换到当层
+                if h > 0 and w > 0:
+                    radius = gaussian_radius((math.ceil(h), math.ceil(w)))
+                    radius = max(0, int(radius))
+                    ct = np.array(
+                      [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
+                    #print(ct)
+                    ct_int = ct.astype(np.int32)
+
+                    draw_umich_gaussian(hm[cls_id], ct_int, radius)
+
+                    h, w = 1. * h, 1. * w
+                    offset_count = ct - ct_int # h, w
+                    # ct_int即表明在featmap的位置 ct_int[1] * output_w + ct_int[0] 
+                    # 如果当前位置有物体的中心，现在是直接覆盖
+                    # 这里设置监督信号，第1位表示w，第2位表示h
+
+                    wh[ct_int[1], ct_int[0], 0] = w 
+                    wh[ct_int[1], ct_int[0], 1] = h 
+                    offset[ct_int[1], ct_int[0], 0] = offset_count[0]
+                    offset[ct_int[1], ct_int[0], 0] = offset_count[1]
+            
+            
+                heatmaps_targets[index_level] = hm
+                wh_targets[index_level] = wh
+                offset_targets[index_level] = offset
+
+        flatten_heatmaps_targets = [
+            hm.transpose(1, 2, 0).reshape(-1, self.cls_out_channels)
+            for hm in heatmaps_targets
+        ]
+        #for i in range(len(flatten_heatmaps_targets)):
+        #    print(flatten_heatmaps_targets[i].shape)
+            
+        heatmaps_targets = np.concatenate(flatten_heatmaps_targets, axis=0) 
+        #print(heatmaps_targets.shape) # (13343, 80)
+        
+        flatten_wh_targets = [
+            wh.reshape(-1, 2) for wh in wh_targets
+        ]
+        wh_targets = np.concatenate(flatten_wh_targets)
+        
+        flatten_offset_targets = [
+            offset.reshape(-1, 2) for offset in offset_targets
+        ]
+        offset_targets = np.concatenate(flatten_offset_targets)
+
+        # transform the heatmaps_targets, wh_targets, offset_targets into tensor
+        heatmaps_targets = torch.from_numpy(np.stack(heatmaps_targets))
+        heatmaps_targets = torch.tensor(heatmaps_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
+        wh_targets = torch.from_numpy(np.stack(wh_targets))
+        wh_targets = torch.tensor(wh_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
+        offset_targets = torch.from_numpy(np.stack(offset_targets))
+        offset_targets = torch.tensor(offset_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
+        
+        return heatmaps_targets, wh_targets, offset_targets
+
+    # test use
+    @force_fp32(apply_to=('cls_scores', 'wh_preds', 'offset_preds'))
     def get_bboxes(self,
-                   tl_heats,
-                   br_heats,
-                   tl_embs,
-                   br_embs,
-                   tl_offs,
-                   br_offs,
-                   img_metas,
-                   rescale=False,
-                   with_nms=True):
-        """Transform network output for a batch into bbox predictions.
+                    cls_scores,
+                    wh_preds,
+                    offset_preds,
+                    img_metas,
+                    cfg):
+        assert len(cls_scores) == len(wh_preds) == len(offset_preds)
+        # cls_scores => [num_levels] => [batch featmap] => [batch, 80, h, w]
+        # wh_preds  => [num_levels] => [featmap] => [2, h, w]
+        # offset_preds => [num_levels] => [featmap] => [2, h, w]
+        num_levels = len(cls_scores)
 
-        Args:
-            tl_heats (list[Tensor]): Top-left corner heatmaps for each level
-                with shape (N, num_classes, H, W).
-            br_heats (list[Tensor]): Bottom-right corner heatmaps for each
-                level with shape (N, num_classes, H, W).
-            tl_embs (list[Tensor]): Top-left corner embeddings for each level
-                with shape (N, corner_emb_channels, H, W).
-            br_embs (list[Tensor]): Bottom-right corner embeddings for each
-                level with shape (N, corner_emb_channels, H, W).
-            tl_offs (list[Tensor]): Top-left corner offsets for each level
-                with shape (N, corner_offset_channels, H, W).
-            br_offs (list[Tensor]): Bottom-right corner offsets for each level
-                with shape (N, corner_offset_channels, H, W).
-            img_metas (list[dict]): Meta information of each image, e.g.,
-                image size, scaling factor, etc.
-            rescale (bool): If True, return boxes in original image space.
-                Default: False.
-            with_nms (bool): If True, do nms before return boxes.
-                Default: True.
-        """
-        assert tl_heats[-1].shape[0] == br_heats[-1].shape[0] == len(img_metas)
+        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
+
         result_list = []
-        for img_id in range(len(img_metas)):
-            result_list.append(
-                self._get_bboxes_single(
-                    tl_heats[-1][img_id:img_id + 1, :],
-                    br_heats[-1][img_id:img_id + 1, :],
-                    tl_embs[-1][img_id:img_id + 1, :],
-                    br_embs[-1][img_id:img_id + 1, :],
-                    tl_offs[-1][img_id:img_id + 1, :],
-                    br_offs[-1][img_id:img_id + 1, :],
-                    img_metas[img_id],
-                    rescale=rescale,
-                    with_nms=with_nms))
+        #print(cls_scores[0].shape) # torch.Size([1, 80, 84, 56])
+        #print(img_metas)
 
-        return result_list
+        for img_id in range(len(img_metas)): # 每个batch中id
+            cls_score_list = [
+                cls_scores[i][img_id].detach() for i in range(num_levels)
+            ] # =>[num_levels] => [80, h, w]
+            wh_pred_list = [
+                wh_preds[i][img_id].detach() for i in range(num_levels)
+            ]
+            offset_pred_list = [
+                offset_preds[i][img_id].detach() for i in range(num_levels)
+            ]
+            #img_shape = img_metas[img_id]['img_shape']
+            scale_factor = img_metas[img_id]['scale_factor']
+            c = img_metas[img_id]['c']
+            s = img_metas[img_id]['s']
+            det_bboxes = self.get_bboxes_single(cls_score_list,  wh_pred_list,
+                                                offset_pred_list,
+                                                featmap_sizes, c, s,
+                                                scale_factor, cfg) # 对每一张图像进行解调
+            result_list.append(det_bboxes)
+        return result_list # [batch_size]
 
     def get_bboxes_single(self,
                         cls_scores,
@@ -535,24 +481,6 @@ class CenterHead(CornerHead):
                         s,
                         scale_factor,
                         cfg):
-        """Transform outputs for a single batch item into bbox predictions.
-
-        Args:
-            cls_scores (list[Tensor]): Box scores for a single scale level
-                Has shape (num_points * num_classes, H, W).
-            bbox_preds (list[Tensor]): Box energies / deltas for a single scale
-                level with shape (num_points * 4, H, W).
-
-
-            cfg (mmcv.Config): Test / postprocessing configuration,
-                if None, test_cfg would be used.
-
-        Returns:
-            Tensor: Labeled boxes in shape (n, 5), where the first 4 columns \
-                are bounding box positions (tl_x, tl_y, br_x, br_y) and the \
-                5-th column is a score between 0 and 1.
-        """
-
         assert len(cls_scores) == len(wh_preds) == len(offset_preds) == len(featmap_sizes)
         
         detections = []
@@ -578,124 +506,358 @@ class CenterHead(CornerHead):
 
         return results
 
-    def _bboxes_nms(self, bboxes, labels, cfg):
-        out_bboxes, keep = batched_nms(bboxes[:, :4], bboxes[:, -1], labels,
-                                       cfg.nms_cfg)
-        out_labels = labels[keep]
+#num_classes = 80
 
-        if len(out_bboxes) > 0:
-            idx = torch.argsort(out_bboxes[:, -1], descending=True)
-            idx = idx[:cfg.max_per_img]
-            out_bboxes = out_bboxes[idx]
-            out_labels = out_labels[idx]
+def gaussian_small_radius(det_size, min_overlap=0.7):
+    height, width = det_size
+    
+    a1  = 1
+    b1  = (height + width)
+    c1  = width * height * (1 - min_overlap) / (1 + min_overlap)
+    sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
+    r1  = (b1 - sq1) / (2 * a1)
+    
+    a2  = 4
+    b2  = 2 * (height + width)
+    c2  = (1 - min_overlap) * width * height
+    sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
+    r2  = (b2 - sq2) / (2 * a2)
+    
+    a3  = 4 * min_overlap
+    b3  = -2 * min_overlap * (height + width)
+    c3  = (min_overlap - 1) * width * height
+    sq3 = np.sqrt(b3 ** 2 - 4 * a3 * c3)
+    r3  = (b3 + sq3) / (2 * a3)
+    return min(r1, r2, r3)
 
-        return out_bboxes, out_labels
 
-    def _gather_feat(self, feat, ind, mask=None):
-        """Gather feature according to index.
+def draw_umich_gaussian(heatmap, center, radius, k=1):
+    diameter = 2 * radius + 1
+    gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
+    
+    x, y = int(center[0]), int(center[1])
+    
+    height, width = heatmap.shape[0:2]
+        
+    left, right = min(x, radius), min(width - x, radius + 1)
+    top, bottom = min(y, radius), min(height - y, radius + 1)
+    
+    masked_heatmap  = heatmap[y - top:y + bottom, x - left:x + right]
+    masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
+    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0: # TODO debug
+        np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
+    return heatmap
 
-        Args:
-            feat (Tensor): Target feature map.　维度：batch * (80 x 100) * 1 
-            ind (Tensor): Target coord index.   维度：batch * 100
-            mask (Tensor | None): Mask of featuremap. Default: None.
+def affine_transform(pt, t):
+    new_pt = np.array([pt[0], pt[1], 1.], dtype=np.float32).T
+    new_pt = np.dot(t, new_pt)
+    return new_pt[:2]
 
-        Returns:
-            feat (Tensor): Gathered feature. 维度：batch * 100 * 1 
+def get_affine_transform(center,
+                         scale,
+                         rot,
+                         output_size,
+                         shift=np.array([0, 0], dtype=np.float32),
+                         inv=0):
+    if not isinstance(scale, np.ndarray) and not isinstance(scale, list):
+        scale = np.array([scale, scale], dtype=np.float32)
 
-        *num_classes　＝　８０　
-        *K = 100 *refer to method topK
-        """
-        dim = feat.size(2)
-        ind = ind.unsqueeze(2).expand(ind.size(0), ind.size(1), dim)
-        feat = feat.gather(1, ind) #Gather feature according to index
-        if mask is not None:
-            mask = mask.unsqueeze(2).expand_as(feat)
-            feat = feat[mask]
-            feat = feat.view(-1, dim)
-        return feat
+    scale_tmp = scale
+    src_w = scale_tmp[0]
+    dst_w = output_size[0]
+    dst_h = output_size[1]
 
-    def _transpose_and_gather_feat(self, feat, ind):
-        """Transpose and gather feature according to index.
+    rot_rad = np.pi * rot / 180
+    src_dir = get_dir([0, src_w * -0.5], rot_rad)
+    dst_dir = np.array([0, dst_w * -0.5], np.float32)
 
-        Args:
-            feat (Tensor): Target feature map.　　　维度：batch * C（channel） * W * H
-            ind (Tensor): Target coord index.　　　　维度：batch * K
+    src = np.zeros((3, 2), dtype=np.float32)
+    dst = np.zeros((3, 2), dtype=np.float32)
+    src[0, :] = center + scale_tmp * shift
+    src[1, :] = center + src_dir + scale_tmp * shift
+    dst[0, :] = [dst_w * 0.5, dst_h * 0.5]
+    dst[1, :] = np.array([dst_w * 0.5, dst_h * 0.5], np.float32) + dst_dir
 
-        Returns:
-            feat (Tensor): Transposed and gathered feature.　　维度：feat：batch * K * C
-            　　　　　　　　　含义为feat[i, j, k]为第i个batch，第k个channel的第j个最大值。
-        """
-        feat = feat.permute(0, 2, 3, 1).contiguous()
-        feat = feat.view(feat.size(0), -1, feat.size(3))
-        feat = self._gather_feat(feat, ind)
-        return feat
+    src[2:, :] = get_3rd_point(src[0, :], src[1, :])
+    dst[2:, :] = get_3rd_point(dst[0, :], dst[1, :])
 
-    def decode_heatmap(self,
-                       heat,
-                       wh,
-                       reg = None,
-                       #cat_spec_wh=False,  #不一定管用　from　作者
-                       img_meta=None,
-                       K=100,
-                       kernel=3,
-                       num_dets=1000):
-        """Transform outputs for a single batch item into raw bbox predictions.
+    if inv:
+        trans = cv2.getAffineTransform(np.float32(dst), np.float32(src))
+    else:
+        trans = cv2.getAffineTransform(np.float32(src), np.float32(dst))
 
-        Args:
-            heat (Tensor): heatmap for current level with
-                shape (N, num_classes, H, W).
-            wｈ(Tensor): width and height of bbox #也可以理解为中心点的宽高
-            reg (Tensor): center point offset for current level with
-                shape (N, corner_offset_channels, H, W). #关键点量化误差补偿　offset
-            img_meta (dict): Meta information of current image, e.g.,
-                image size, scaling factor, etc.
-            K (int): Get top k corner keypoints from heatmap.
-            kernel (int): Max pooling kernel for extract local maximum pixels.
-            num_dets (int): Num of raw boxes before doing nms.
+    return trans
 
-        Returns:
-            tuple[torch.Tensor]: Decoded output of CornerHead, containing the
-            following Tensors:
+def get_dir(src_point, rot_rad):
+    sn, cs = np.sin(rot_rad), np.cos(rot_rad)
 
-            - bboxes (Tensor): Coords of each box.
-            - scores (Tensor): Scores of each box.
-            - clses (Tensor): Categories of each box.
-        """
+    src_result = [0, 0]
+    src_result[0] = src_point[0] * cs - src_point[1] * sn
+    src_result[1] = src_point[0] * sn + src_point[1] * cs
 
-        batch, _, height, width = heat.size()
-        inp_h, inp_w, _ = img_meta['pad_shape']
+    return src_result
 
-        # perform nms on heatmaps
-        heat = self._local_maximum(heat, kernel=kernel)
+def get_3rd_point(a, b):
+    direct = a - b
+    return b + np.array([-direct[1], direct[0]], dtype=np.float32)
 
-        scores, inds, clses, ys, xs = self._topk(heat, K=K)
-        # xs、ys是inds转化成在heat_map上面的行、列
-
-        #如果用了关键点量化误差补偿，则解码并加到先前的结果上
-        if regs is not None:
-            regs = _tranpose_and_gather_feature(regs, inds)
-            regs = regs.view(batch, K, 2)
-            xs = xs.view(batch, K, 1) + regs[:, :, 0:1]
-            ys = ys.view(batch, K, 1) + regs[:, :, 1:2]
-        else:
-            xs = xs.view(batch, K, 1) + 0.5
-            ys = ys.view(batch, K, 1) + 0.5
-
-        wh = self._transpose_and_gather_feat(wh, inds) # inds 对应 h, w的尺度
+def ctdet_decode(heat, wh, reg=None, cat_spec_wh=False, K=40):
+    batch, cat, height, width = heat.size() # 1， 80, 128, 128
+    
+    #print("batch, cat, height, width\n", batch, cat, height, width)
+   
+    if height * width <= K:
+        K = height * width 
+    #print("k:", K)
+    
+    heat = _nms(heat)
+    
+    scores, inds, clses, ys, xs = _topk(heat, K=K)
+    
+    if reg is not None:
+        reg = _tranpose_and_gather_feat(reg, inds)
+        reg = reg.view(batch, K, 2)
+        xs = xs.view(batch, K, 1) + reg[:, :, 0:1]
+        ys = ys.view(batch, K, 1) + reg[:, :, 1:2]
+    else:
+        xs = xs.view(batch, K, 1) + 0.5
+        ys = ys.view(batch, K, 1) + 0.5
+    wh = _tranpose_and_gather_feat(wh, inds) # inds 对应 h, w的尺度
+    if cat_spec_wh:
+        wh = wh.view(batch, K, cat, 2)
+        clses_ind = clses.view(batch, K, 1, 1).expand(batch, K, 1, 2).long()
+        wh = wh.gather(2, clses_ind).view(batch, K, 2)
+    else:
         wh = wh.view(batch, K, 2)
-      
-        clses  = clses.view(batch, K, 1).float()
-        scores = scores.view(batch, K, 1) # 0, 1, 2
-        bboxes = torch.cat([xs - wh[..., 0:1] / 2, 
+        
+    clses  = clses.view(batch, K, 1).float()
+    scores = scores.view(batch, K, 1) # 0, 1, 2
+    
+    bboxes = torch.cat([xs - wh[..., 0:1] / 2, 
                         ys - wh[..., 1:2] / 2,
                         xs + wh[..., 0:1] / 2, 
                         ys + wh[..., 1:2] / 2], dim=2)
-
-        return bboxes, scores, clses
-
-'''
+    
     detections = torch.cat([bboxes, scores, clses], dim=2)
-    return detections    
-'''
+    return detections
+
+def _nms(heat, kernel=3):
+    pad = (kernel - 1) // 2
+    hmax = nn.functional.max_pool2d(
+        heat, (kernel, kernel), stride=1, padding=pad)
+    keep = (hmax == heat).float()
+    return heat * keep
+
+def _gather_feat(feat, ind, mask=None):
+    dim  = feat.size(2)
+    ind  = ind.unsqueeze(2).expand(ind.size(0), ind.size(1), dim)
+    feat = feat.gather(1, ind)
+    if mask is not None:
+        mask = mask.unsqueeze(2).expand_as(feat)
+        feat = feat[mask]
+        feat = feat.view(-1, dim)
+    return feat
+
+def _tranpose_and_gather_feat(feat, ind):
+    feat = feat.permute(0, 2, 3, 1).contiguous()
+    feat = feat.view(feat.size(0), -1, feat.size(3))
+    feat = _gather_feat(feat, ind)
+    return feat
+
+def _topk(scores, K=40):
+    batch, cat, height, width = scores.size() # 1， 80，height, width
+    #print("batch, cat, height, width\n", batch, cat, height, width)
+    #print("k:", K)
+
+    topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
+
+    topk_inds = topk_inds % (height * width)
+    topk_ys   = (topk_inds / width).int().float() # y-> h, x-> w
+    topk_xs   = (topk_inds % width).int().float()
+
+    topk_score, topk_ind = torch.topk(topk_scores.view(batch, -1), K)
+
+    topk_clses = (topk_ind / K).int()
+    topk_inds = _gather_feat(
+        topk_inds.view(batch, -1, 1), topk_ind).view(batch, K)
+    topk_ys = _gather_feat(topk_ys.view(batch, -1, 1), topk_ind).view(batch, K)
+    topk_xs = _gather_feat(topk_xs.view(batch, -1, 1), topk_ind).view(batch, K)
+
+    return topk_score, topk_inds, topk_clses, topk_ys, topk_xs
+
+def post_process(dets, c, s, out_height, out_width, scale, num_classes):
+    dets = dets.detach().cpu().numpy()
+    #print("dets", dets) # (1, 100, 6)
+
+    dets = dets.reshape(1, -1, dets.shape[2]) # （x1, y1, x2, y2)
+
+    dets = ctdet_post_process(
+        dets.copy(), [c], [s],
+        out_height, out_width, num_classes)
+    
+    for j in range(1, num_classes + 1):
+        dets[0][j] = np.array(dets[0][j], dtype=np.float32).reshape(-1, 5)
+        dets[0][j][:, :4] /= scale
+    return dets[0]
+
+def ctdet_post_process(dets, c, s, h, w, num_classes):
+    ret = []
+    #print(dets.shape) # (1, 100, 6)
+    #print(c)
+    for i in range(dets.shape[0]):
+        top_preds = {}
+        dets[i, :, :2] = transform_preds(
+            dets[i, :, 0:2], c[i], s[i], (w, h))
+        dets[i, :, 2:4] = transform_preds(
+            dets[i, :, 2:4], c[i], s[i], (w, h))
+
+        classes = dets[i, :, -1] # 类别这里是80
+            
+        for j in range(num_classes):
+            inds = (classes == j)
+            top_preds[j + 1] = np.concatenate([
+                dets[i, inds, :4].astype(np.float32),
+                dets[i, inds, 4:5].astype(np.float32)], axis=1).tolist() # 这里将框按照类别进行分类
+        ret.append(top_preds)
+
+    return ret    
+  
+def merge_outputs(detections, num_classes):
+
+    results = {}
+    max_per_image = 100
+    for j in range(1, num_classes + 1):
+        results[j] = np.concatenate(
+            [detection[j] for detection in detections], axis=0).astype(np.float32)
+
+        results[j] = soft_nms(results[j], Nt=0.5, method=2, threshold=0.01)
+
+    scores = np.hstack([results[j][:, 4] for j in range(1, num_classes + 1)])
+
+    if len(scores) > max_per_image:
+        kth = len(scores) - max_per_image
+        thresh = np.partition(scores, kth)[kth]
+        for j in range(1, num_classes + 1):
+            keep_inds = (results[j][:, 4] >= thresh)
+            results[j] = results[j][keep_inds]
+
+    return results2coco_boxes(results, num_classes)
+
+def results2coco_boxes(results, num_classes): 
+    """Convert detection results to a list of numpy arrays.
+    Args:
+        bboxes (Tensor): shape (n, 5)
+        labels (Tensor): shape (n, )
+        num_classes (int): class number, including background class
+    Returns:
+        list(ndarray): bbox results of each class
+    """
+    bboxes = [0 for i in range(num_classes)]
+    for j in range(1, num_classes + 1):
+        if len(results[j]) == 0:
+            bboxes[j - 1] = np.zeros((0, 5), dtype=np.float32)
+            continue
+        bboxes[j - 1] = results[j]
+    #print(bboxes) # xyxy
+    return bboxes
 
 
+def soft_nms(boxes, sigma=0.5, Nt=0.3, threshold=0.01, method=0):
+    N = boxes.shape[0]
+    pos = 0
+    maxscore = 0
+    maxpos = 0     #cdef float x1,x2,y1,y2,tx1,tx2,ty1,ty2,ts,area,weight,ov
+
+    for i in range(N):
+        maxscore = boxes[i, 4]
+        maxpos = i
+
+        tx1 = boxes[i,0]
+        ty1 = boxes[i,1]
+        tx2 = boxes[i,2]
+        ty2 = boxes[i,3]
+        ts = boxes[i,4]
+
+        pos = i + 1
+        # get max box
+        while pos < N:
+            if maxscore < boxes[pos, 4]:
+                maxscore = boxes[pos, 4]
+                maxpos = pos
+            pos = pos + 1
+
+        # add max box as a detection 
+        boxes[i,0] = boxes[maxpos,0]
+        boxes[i,1] = boxes[maxpos,1]
+        boxes[i,2] = boxes[maxpos,2]
+        boxes[i,3] = boxes[maxpos,3]
+        boxes[i,4] = boxes[maxpos,4]
+
+        # swap ith box with position of max box
+        boxes[maxpos,0] = tx1
+        boxes[maxpos,1] = ty1
+        boxes[maxpos,2] = tx2
+        boxes[maxpos,3] = ty2
+        boxes[maxpos,4] = ts
+
+        tx1 = boxes[i,0]
+        ty1 = boxes[i,1]
+        tx2 = boxes[i,2]
+        ty2 = boxes[i,3]
+        ts = boxes[i,4]
+
+        pos = i + 1
+        # NMS iterations, note that N changes if detection boxes fall below threshold
+        while pos < N:
+            x1 = boxes[pos, 0]
+            y1 = boxes[pos, 1]
+            x2 = boxes[pos, 2]
+            y2 = boxes[pos, 3]
+            s = boxes[pos, 4]
+
+            area = (x2 - x1 + 1) * (y2 - y1 + 1)
+            iw = (min(tx2, x2) - max(tx1, x1) + 1)
+            if iw > 0:
+                ih = (min(ty2, y2) - max(ty1, y1) + 1)
+                if ih > 0:
+                    ua = float((tx2 - tx1 + 1) * (ty2 - ty1 + 1) + area - iw * ih)
+                    ov = iw * ih / ua #iou between max box and detection box
+
+                    if method == 1: # linear
+                        if ov > Nt: 
+                            weight = 1 - ov
+                        else:
+                            weight = 1
+                    elif method == 2: # gaussian
+                        weight = np.exp(-(ov * ov)/sigma)
+                    else: # original NMS
+                        if ov > Nt: 
+                            weight = 0
+                        else:
+                            weight = 1
+
+                    boxes[pos, 4] = weight*boxes[pos, 4]
+                                
+                    # if box score falls below threshold, discard the box by swapping with last box
+                    # update N
+                    if boxes[pos, 4] < threshold:
+                        boxes[pos,0] = boxes[N-1, 0]
+                        boxes[pos,1] = boxes[N-1, 1]
+                        boxes[pos,2] = boxes[N-1, 2]
+                        boxes[pos,3] = boxes[N-1, 3]
+                        boxes[pos,4] = boxes[N-1, 4]
+                        N = N - 1
+                        pos = pos - 1
+
+            pos = pos + 1
+
+    keep = [i for i in range(N)]
+    boxes = boxes[keep]
+    return boxes
+  
+def transform_preds(coords, center, scale, output_size):
+    target_coords = np.zeros(coords.shape)
+    trans = get_affine_transform(center, scale, 0, output_size, inv=1) 
+    for p in range(coords.shape[0]):
+        target_coords[p, 0:2] = affine_transform(coords[p, 0:2], trans)
+    return target_coords

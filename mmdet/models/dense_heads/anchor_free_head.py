@@ -143,7 +143,7 @@ class AnchorFreeHead(BaseDenseHead):
         for m in self.reg_convs:
             if isinstance(m.conv, nn.Conv2d):
                 normal_init(m.conv, std=0.01)
-        bias_cls = bias_init_with_prob(0.01)
+        bias_cls = (0.01)
         normal_init(self.conv_cls, std=0.01, bias=bias_cls)
         normal_init(self.conv_reg, std=0.01)
 
