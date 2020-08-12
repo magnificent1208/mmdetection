@@ -1088,20 +1088,7 @@ class CenterHead(CornerHead):
         clses = tl_clses.contiguous().view(batch, -1, 1)
         clses = self._gather_feat(clses, inds).float()
 
-        tl_scores = tl_scores.contiguous().view(batch, -1, 1)
-        tl_scores = _gather_feat(tl_scores, inds).float()
-        br_scores = br_scores.contiguous().view(batch, -1, 1)
-        br_scores = _gather_feat(br_scores, inds).float()
-
-        ct_xs = ct_xs[:, 0, :]
-        ct_ys = ct_ys[:, 0, :]
-
-        center = torch.cat([ct_xs.unsqueeze(2), ct_ys.unsqueeze(2), ct_clses.float().unsqueeze(2), 
-                            ct_scores.unsqueeze(2)], dim=2)
-        detections = torch.cat([bboxes, scores, tl_scores, br_scores, clses], dim=2)
-
-        return detections, center
-        # return bboxes, scores, clses
+        return bboxes, scores, clses
 
     def _create_ct_bboxes(self, bboxes, n=3):
         """根据bbox生成中心区域框

@@ -12,7 +12,7 @@ import math
 from mmdet.core import multi_apply, multiclass_nms, distance2bbox, force_fp32
 from ..builder import build_loss, HEADS
 from .corner_head import CornerHead
-from ..utils import gaussian_radius, gen_gaussian_target, draw_umich_gaussian
+from ..utils import gaussian_radius, gen_gaussian_target
 
 # from ..utils import bias_init_with_prob, Scale, ConvModule
 

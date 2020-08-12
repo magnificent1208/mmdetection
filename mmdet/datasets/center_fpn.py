@@ -123,8 +123,7 @@ class CenterFPN_dataset(CocoDataset):
             self.num_classes = 20
             cat_ids = {v: i for i, v in enumerate(np.arange(1, 21, dtype=np.int32))}
 
-        # import pdb; pdb.set_trace()
-        img_id = self.img_infos[index]['id']
+        img_id = self.data_infos[index]['id']
         file_name = self.coco.loadImgs(ids=[img_id])[0]['file_name']
         img_path = os.path.join(self.img_prefix, file_name)
         ann_ids = self.coco.getAnnIds(imgIds=[img_id])
@@ -168,7 +167,7 @@ class CenterFPN_dataset(CocoDataset):
         meta['flipped'] = flipped 
         meta['height'] = height
         meta['width'] = width
-     
+
         inp = cv2.warpAffine(img, trans_input,
                              (input_w, input_h),
                              flags=cv2.INTER_LINEAR)
