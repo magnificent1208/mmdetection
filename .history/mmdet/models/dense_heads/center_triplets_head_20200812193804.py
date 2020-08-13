@@ -14,7 +14,7 @@ import math
 from mmdet.core import multi_apply, multiclass_nms, distance2bbox, force_fp32
 from ..builder import build_loss, HEADS
 from ..utils import gaussian_radius, gen_gaussian_target
-from .base_dense_head import BaseDenseHead
+from .base_dense_haed import BaseDenseHead
 
 
 INF = 1e8
@@ -59,7 +59,7 @@ class BiCascadeCornerPool(nn.Module):
         self.aftconcat_conv = ConvModule(
             feat_channels, feat_channels, 3, padding=1, norm_cfg=norm_cfg, act_cfg=None)
         self.direct_conv = ConvModule(
-            in_channels, feat_channels, 1, norm_cfg=norm_cfg, act_cfg=None)
+            feat_channels, feat_channels, 1, padding=1, norm_cfg=norm_cfg, act_cfg=None)
         self.out_conv = ConvModule(
             feat_channels, out_channels, 3, padding=1, norm_cfg=norm_cfg, act_cfg=None)
 
@@ -166,7 +166,7 @@ class CenterHead(BaseDenseHead):
     def __init__(self,
                  num_classes,
                  in_channels,
-                 feat_channels=128,
+                 feature_channel=128,
                  num_feat_levels=2,
                  corner_emb_channels=1,
                  train_cfg=None,
@@ -300,7 +300,8 @@ class CenterHead(BaseDenseHead):
         self._init_center_kpt_layers()
 
     def init_weights(self):
-        """Initialize weights of the head."""
+        """Initialize weights of the head.
+        """
         bias_init = bias_init_with_prob(0.1)
         for i in range(self.num_feat_levels):
             self.tl_heat[i][-1].conv.bias.data.fill_(bias_init)
@@ -380,7 +381,7 @@ class CenterHead(BaseDenseHead):
 
         center_pool = self.center_pool[lvl_ind](x)
         center_heat = self.center_heat[lvl_ind](center_pool)
-        center_off = self.center_off[lvl_ind](center_pool)
+        center_off = self.center_off[lvl_ind](center_heat)
 
         result_list = [tl_heat, br_heat, tl_emb, br_emb, tl_off, br_off]
         if return_pool:
@@ -631,7 +632,6 @@ class CenterHead(BaseDenseHead):
                 - off_loss (list[Tensor]): Corner offset losses of all feature
                   levels.
         """
-        import pdb; pdb.set_trace()
         targets = self.get_targets(
             gt_bboxes,
             gt_labels,
@@ -1127,19 +1127,6 @@ class CenterHead(BaseDenseHead):
         return detections, center
         # return bboxes, scores, clses
 
-    def _bboxes_nms(self, bboxes, labels, cfg):
-        out_bboxes, keep = batched_nms(bboxes[:, :4], bboxes[:, -1], labels,
-                                       cfg.nms_cfg)
-        out_labels = labels[keep]
-
-        if len(out_bboxes) > 0:
-            idx = torch.argsort(out_bboxes[:, -1], descending=True)
-            idx = idx[:cfg.max_per_img]
-            out_bboxes = out_bboxes[idx]
-            out_labels = out_labels[idx]
-
-        return out_bboxes, out_labels
-    
     def _create_ct_bboxes(self, bboxes, n=3):
         """根据bbox生成中心区域框
 

@@ -27,7 +27,6 @@ class CenterNet(SingleStageDetector):
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
 
-
         return outs
     
     def forward_test(self, img, img_meta, **kwargs):

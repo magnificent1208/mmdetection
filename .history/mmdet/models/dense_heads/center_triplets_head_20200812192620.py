@@ -14,7 +14,7 @@ import math
 from mmdet.core import multi_apply, multiclass_nms, distance2bbox, force_fp32
 from ..builder import build_loss, HEADS
 from ..utils import gaussian_radius, gen_gaussian_target
-from .base_dense_head import BaseDenseHead
+from .corner_head import CornerHead
 
 
 INF = 1e8
@@ -59,7 +59,7 @@ class BiCascadeCornerPool(nn.Module):
         self.aftconcat_conv = ConvModule(
             feat_channels, feat_channels, 3, padding=1, norm_cfg=norm_cfg, act_cfg=None)
         self.direct_conv = ConvModule(
-            in_channels, feat_channels, 1, norm_cfg=norm_cfg, act_cfg=None)
+            feat_channels, feat_channels, 1, padding=1, norm_cfg=norm_cfg, act_cfg=None)
         self.out_conv = ConvModule(
             feat_channels, out_channels, 3, padding=1, norm_cfg=norm_cfg, act_cfg=None)
 
@@ -150,7 +150,7 @@ class CenterPool(nn.Module):
 
 
 @HEADS.register_module
-class CenterHead(BaseDenseHead):
+class CenterHead(CornerHead):
     """Head of CenterNet: Chou maggie
 
     Args:
@@ -166,7 +166,6 @@ class CenterHead(BaseDenseHead):
     def __init__(self,
                  num_classes,
                  in_channels,
-                 feat_channels=128,
                  num_feat_levels=2,
                  corner_emb_channels=1,
                  train_cfg=None,
@@ -182,7 +181,7 @@ class CenterHead(BaseDenseHead):
                      push_weight=0.25),
                  loss_offset=dict(
                      type='SmoothL1Loss', beta=1.0, loss_weight=1)):
-        super(CenterHead, self).__init__()
+        super(CenterHead, self).__init__(num_classes, in_channels)
 
         self.num_classes = num_classes
         # self.cls_out_channels = num_classes
@@ -204,13 +203,6 @@ class CenterHead(BaseDenseHead):
         self.test_cfg = test_cfg
 
         self._init_layers()
-
-    def _make_layers(self, out_channels, in_channels=256, feat_channels=256):
-        """Initialize conv sequential for CornerHead."""
-        return nn.Sequential(
-            ConvModule(in_channels, feat_channels, 3, padding=1),
-            ConvModule(
-                feat_channels, out_channels, 1, norm_cfg=None, act_cfg=None))
     
     def _init_corner_kpt_layers(self):
         """Initialize corner keypoint layers.
@@ -249,24 +241,6 @@ class CenterHead(BaseDenseHead):
                 self._make_layers(
                     out_channels=self.corner_offset_channels,
                     in_channels=self.in_channels))
-
-    def _init_corner_emb_layers(self):
-        """Initialize corner embedding layers.
-
-        Only include corner embedding branch with two parts: prefix `tl_` for
-        top-left and `br_` for bottom-right.
-        """
-        self.tl_emb, self.br_emb = nn.ModuleList(), nn.ModuleList()
-
-        for _ in range(self.num_feat_levels):
-            self.tl_emb.append(
-                self._make_layers(
-                    out_channels=self.corner_emb_channels,
-                    in_channels=self.in_channels))
-            self.br_emb.append(
-                self._make_layers(
-                    out_channels=self.corner_emb_channels,
-                    in_channels=self.in_channels))
     
     def _init_center_kpt_layers(self):
         """Initialize center keypoint layers. Use CenterPool.
@@ -288,7 +262,8 @@ class CenterHead(BaseDenseHead):
                     in_channels=self.in_channels))
             self.center_off.append(
                 self._make_layers(
-                    out_channels=self.center_offset_channels,
+                    # out_channels=self.center_offset_channels,
+                    out_channels=self.corner_offset_channels,
                     in_channels=self.in_channels))
         
     def _init_layers(self):
@@ -300,7 +275,8 @@ class CenterHead(BaseDenseHead):
         self._init_center_kpt_layers()
 
     def init_weights(self):
-        """Initialize weights of the head."""
+        """Initialize weights of the head.
+        """
         bias_init = bias_init_with_prob(0.1)
         for i in range(self.num_feat_levels):
             self.tl_heat[i][-1].conv.bias.data.fill_(bias_init)
@@ -380,7 +356,7 @@ class CenterHead(BaseDenseHead):
 
         center_pool = self.center_pool[lvl_ind](x)
         center_heat = self.center_heat[lvl_ind](center_pool)
-        center_off = self.center_off[lvl_ind](center_pool)
+        center_off = self.center_off[lvl_ind](center_heat)
 
         result_list = [tl_heat, br_heat, tl_emb, br_emb, tl_off, br_off]
         if return_pool:
@@ -631,7 +607,6 @@ class CenterHead(BaseDenseHead):
                 - off_loss (list[Tensor]): Corner offset losses of all feature
                   levels.
         """
-        import pdb; pdb.set_trace()
         targets = self.get_targets(
             gt_bboxes,
             gt_labels,
@@ -1127,19 +1102,6 @@ class CenterHead(BaseDenseHead):
         return detections, center
         # return bboxes, scores, clses
 
-    def _bboxes_nms(self, bboxes, labels, cfg):
-        out_bboxes, keep = batched_nms(bboxes[:, :4], bboxes[:, -1], labels,
-                                       cfg.nms_cfg)
-        out_labels = labels[keep]
-
-        if len(out_bboxes) > 0:
-            idx = torch.argsort(out_bboxes[:, -1], descending=True)
-            idx = idx[:cfg.max_per_img]
-            out_bboxes = out_bboxes[idx]
-            out_labels = out_labels[idx]
-
-        return out_bboxes, out_labels
-    
     def _create_ct_bboxes(self, bboxes, n=3):
         """根据bbox生成中心区域框
 

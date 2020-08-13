@@ -631,7 +631,6 @@ class CenterHead(BaseDenseHead):
                 - off_loss (list[Tensor]): Corner offset losses of all feature
                   levels.
         """
-        import pdb; pdb.set_trace()
         targets = self.get_targets(
             gt_bboxes,
             gt_labels,

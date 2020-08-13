@@ -14,7 +14,7 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=True)),
     neck=None,
     bbox_head=dict(
-        type='CornerHead',
+        type='CenterHead',
         num_classes=80,
         in_channels=256,
         num_feat_levels=2,

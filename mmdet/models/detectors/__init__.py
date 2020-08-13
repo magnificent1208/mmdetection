@@ -19,8 +19,9 @@ from .retinanet import RetinaNet
 from .rpn import RPN
 from .single_stage import SingleStageDetector
 from .two_stage import TwoStageDetector
-from .centernet import CenterNet
+# from .centernet import CenterNet
 from .centernet_fpn import CenterNetFPN
+from .centernet_triple import CenterNet
 
 
 __all__ = [

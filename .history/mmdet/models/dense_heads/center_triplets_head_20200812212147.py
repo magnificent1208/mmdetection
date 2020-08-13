@@ -380,7 +380,7 @@ class CenterHead(BaseDenseHead):
 
         center_pool = self.center_pool[lvl_ind](x)
         center_heat = self.center_heat[lvl_ind](center_pool)
-        center_off = self.center_off[lvl_ind](center_pool)
+        center_off = self.center_off[lvl_ind](center_heat)
 
         result_list = [tl_heat, br_heat, tl_emb, br_emb, tl_off, br_off]
         if return_pool:
@@ -631,7 +631,6 @@ class CenterHead(BaseDenseHead):
                 - off_loss (list[Tensor]): Corner offset losses of all feature
                   levels.
         """
-        import pdb; pdb.set_trace()
         targets = self.get_targets(
             gt_bboxes,
             gt_labels,
