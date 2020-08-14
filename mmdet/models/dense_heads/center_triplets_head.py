@@ -393,6 +393,9 @@ class CenterHead(BaseDenseHead):
 
         return result_list
 
+    def forward_train(self, **kwargs):
+        print('test_successful')
+
     def get_targets(self,
                     gt_bboxes,
                     gt_labels,
