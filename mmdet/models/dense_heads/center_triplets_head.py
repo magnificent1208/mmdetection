@@ -393,8 +393,46 @@ class CenterHead(BaseDenseHead):
 
         return result_list
 
-    def forward_train(self, **kwargs):
-        print('test_successful')
+    def forward_train(self,
+                      x,
+                      img_metas,
+                      gt_bboxes,
+                      gt_labels=None,
+                      gt_bboxes_ignore=None,
+                      proposal_cfg=None,
+                      **kwargs):
+        """
+        Args:
+            x (list[Tensor]): Features from FPN.
+            img_metas (list[dict]): Meta information of each image, e.g.,
+                image size, scaling factor, etc.
+            gt_bboxes (Tensor): Ground truth bboxes of the image,
+                shape (num_gts, 4).
+            gt_labels (Tensor): Ground truth labels of each box,
+                shape (num_gts,).
+            gt_bboxes_ignore (Tensor): Ground truth bboxes to be
+                ignored, shape (num_ignored_gts, 4).
+            proposal_cfg (mmcv.Config): Test / postprocessing configuration,
+                if None, test_cfg would be used
+
+        Returns:
+            tuple:
+                losses: (dict[str, Tensor]): A dictionary of loss components.
+                proposal_list (list[Tensor]): Proposals of each image.
+        """
+        outs = self(x)
+        # out: (tl_heat, br_heat, tl_emb, br_emb, tl_off, br_off, ct_heat, ct_off)
+        if gt_labels is None:
+            loss_inputs = outs + (gt_bboxes, img_metas)
+        else:
+            loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
+        # import pdb; pdb.set_trace()
+        losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+        if proposal_cfg is None:
+            return losses
+        else:
+            proposal_list = self.get_bboxes(*outs, img_metas, cfg=proposal_cfg)
+            return losses, proposal_list
 
     def get_targets(self,
                     gt_bboxes,
@@ -592,11 +630,11 @@ class CenterHead(BaseDenseHead):
              br_embs,
              tl_offs,
              br_offs,
+             center_heats,
+             center_offs,
              gt_bboxes,
              gt_labels,
              img_metas,
-             center_heats,
-             center_offs,
              gt_bboxes_ignore=None):
         """Compute losses of the head.
 
@@ -634,7 +672,6 @@ class CenterHead(BaseDenseHead):
                 - off_loss (list[Tensor]): Corner offset losses of all feature
                   levels.
         """
-        import pdb; pdb.set_trace()
         targets = self.get_targets(
             gt_bboxes,
             gt_labels,
@@ -704,7 +741,7 @@ class CenterHead(BaseDenseHead):
             br_hmp.sigmoid(),
             gt_br_hmp,
             avg_factor=max(1, gt_br_hmp.eq(1).sum()))
-        corener_det_loss = (tl_det_loss + br_det_loss) / 2.0
+        corner_det_loss = (tl_det_loss + br_det_loss) / 2.0
 
         # Detection loss for center
         center_det_loss = self.loss_heatmap(
