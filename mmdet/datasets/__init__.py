@@ -11,6 +11,10 @@ from .voc import VOCDataset
 from .wider_face import WIDERFaceDataset
 from .xml_style import XMLDataset
 
+from .vis import VISDataset
+from .vhr import VHRDataset
+from .rsod import RSODDataset
+from .sim311 import Sim311Dataset
 from .center_fpn import CenterFPN_dataset
 
 __all__ = [
@@ -19,5 +23,7 @@ __all__ = [
     'LVISV1Dataset', 'GroupSampler', 'DistributedGroupSampler',
     'DistributedSampler', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
     'ClassBalancedDataset', 'WIDERFaceDataset', 'DATASETS', 'PIPELINES',
-    'build_dataset', 'CenterFPN_dataset'
+    'build_dataset', 'CenterFPN_dataset',
+
+    'VHRDataset', 'RSODDataset', 'VISDataset', 'Sim311Dataset'
 ]
