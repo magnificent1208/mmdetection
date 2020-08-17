@@ -15,8 +15,8 @@ from .corner_head import CornerHead
 INF = 1e8
 
 
-@HEADS.register_module
-class CenterHead(nn.Module):
+@HEADS.register_module()
+class CenterHead_triple(nn.Module):
 
     def __init__(self,
                  num_classes, # init 80
@@ -43,19 +43,6 @@ class CenterHead(nn.Module):
                  norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
                  **kwargs):
         super(CenterHead, self).__init__()
-            # num_classes, 
-            # in_channels,
-            # feat_channels,
-            # stacked_convs,
-            # strides,
-            # regress_ranges,
-            # use_cross,
-            # loss_hm,
-            # loss_wh,
-            # loss_offset,
-            # conv_cfg,
-            # norm_cfg,
-            # **kwargs)
 
         self.num_classes = num_classes
         # self.cls_out_channels = num_classes - 1
@@ -720,7 +707,7 @@ def ctdet_post_process(dets, c, s, h, w, num_classes):
                 dets[i, inds, 4:5].astype(np.float32)], axis=1).tolist() # 这里将框按照类别进行分类
         ret.append(top_preds)
 
-    return ret    
+    return ret
   
 def merge_outputs(detections, num_classes):
 

@@ -25,48 +25,26 @@ class CenterNet(SingleStageDetector):
     def forward_train(self, img, img_meta, **kwargs):
         
         x = self.extract_feat(img)
-        outs = self.bbox_head(x)
-
+        outs = self.bbox_head.forward_train(x)
 
         return outs
     
-    def forward_test(self, img, img_meta, **kwargs):
+    def simple_test(self, img, img_metas, rescale=False):
+        """Test function for list of image without argumentation.        
 
-        output = self.backbone(img.type(torch.cuda.FloatTensor))[-1] # batch, c, h, m
-        hm = torch.clamp(output['hm'].sigmoid_(), min=1e-4, max=1-1e-4)
-        wh = output['wh']
-        reg = output['reg']
-    #         print("hm", hm)
-    #         print("wh", wh)
-    #         print("reg", reg)
-        dets = ctdet_decode(hm, wh, reg=reg, K=100)
-    #         print("after process:\n", dets)
-    #         print(img_meta)
-    #         batch = kwargs
-    #         print(batch)
-    #        scale = img_meta[i]['scale'].detach().cpu().numpy()[0]
-        dets = post_process(dets, meta = img_meta, scale=1)
-    #         print("after post_process:\n", dets)
-#        detections.append(dets)
-        detections = [dets]
-        results = merge_outputs(detections)
-#         print(results)
-#         det_bboxes = dets[:,:,:5].view(-1, 5)# (batch, k, 4)
-#         det_labels = dets[:,:,5].view(-1) # (batch, k, 1)
+        Parameters
+        ----------
+        img : list[torch.Tensor]
+            List of imgs to test
+        img_metas : list[dict]
+            List of img information, with several dict.
+        rescale : bool, optional
+            Wheter to recale the results, by default False
+        """
+        x = self.extract_feat(img)
+        outs = self.bbox_head(x)
+        bbox_list = self.bbox_head.get_bboxes(*outs, img_metas, rescale=rescale)
 
-#         x = self.extract_feat(img)
-#         proposal_list = self.simple_test_rpn(
-#             x, img_meta, self.test_cfg.rpn) if proposals is None else proposals
-
-# input is the output of network, return the det_bboxed, det_labels(0~L-1)
-#         det_bboxes, det_labels = self.simple_test_bboxes(
-#             x, img_meta, proposal_list, self.test_cfg.rcnn, rescale=rescale)
-
-#         bbox_results = bbox2result(det_bboxes, det_labels,
-#                                self.backbone.heads['hm'] + 1)
-
-        return results
-    
     def forward_dummy(self, img):
         x = self.backbone(img)
         return x

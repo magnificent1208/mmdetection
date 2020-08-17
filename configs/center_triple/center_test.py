@@ -14,7 +14,7 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=True)),
     neck=None,
     bbox_head=dict(
-        type='CenterHead',
+        type='CenterHead_triple',
         num_classes=80,
         in_channels=256,
         num_feat_levels=2,
@@ -78,8 +78,8 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=1,
+    samples_per_gpu=6,
+    workers_per_gpu=6,
     train=dict(pipeline=train_pipeline),
     val=dict(pipeline=test_pipeline),
     test=dict(pipeline=test_pipeline))
@@ -93,7 +93,7 @@ test_cfg = dict(
     max_per_img=100,
     nms_cfg=dict(type='soft_nms', iou_threshold=0.5, method='gaussian'))
 # optimizer
-optimizer = dict(type='Adam', lr=0.0005)
+optimizer = dict(type='Adam', lr=2.5e-4)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -101,5 +101,6 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[180])
-total_epochs = 210
+    step=[80])
+total_epochs = 100
+work_dir = './work_dirs/center_triple/train_1'
