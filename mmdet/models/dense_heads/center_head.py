@@ -16,7 +16,7 @@ INF = 1e8
 
 
 @HEADS.register_module()
-class CenterHead_triple(nn.Module):
+class CenterHead(nn.Module):
 
     def __init__(self,
                  num_classes, # init 80

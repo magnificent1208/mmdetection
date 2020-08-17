@@ -150,7 +150,7 @@ class CenterPool(nn.Module):
 
 
 @HEADS.register_module()
-class CenterHead(BaseDenseHead):
+class CenterHead_triple(BaseDenseHead):
     """Head of CenterNet: Chou maggie
 
     Args:
@@ -182,7 +182,7 @@ class CenterHead(BaseDenseHead):
                      push_weight=0.25),
                  loss_offset=dict(
                      type='SmoothL1Loss', beta=1.0, loss_weight=1)):
-        super(CenterHead, self).__init__()
+        super(CenterHead_triple, self).__init__()
 
         self.num_classes = num_classes
         # self.cls_out_channels = num_classes
@@ -622,6 +622,8 @@ class CenterHead(BaseDenseHead):
 
         return target_result
 
+    # TODO: add 'apply_to' in force_fp32
+    @force_fp32()
     def loss(self,
              tl_heats,
              br_heats,

@@ -4,7 +4,7 @@ _base_ = [
 
 # model settings
 model = dict(
-    type='CornerNet',
+    type='CenterNet_triple',
     backbone=dict(
         type='HourglassNet',
         downsample_times=5,
