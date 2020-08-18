@@ -791,10 +791,10 @@ class CenterHead_triple(BaseDenseHead):
         corner_off_loss = (tl_off_loss + br_off_loss) / 2.0
 
         # balacen loss with weight
-        pull_loss *= alpha
-        push_loss *= beta
-        corner_off_loss *= gamma
-        center_off_loss *= gamma
+        # pull_loss *= alpha
+        # push_loss *= beta
+        # corner_off_loss *= gamma
+        # center_off_loss *= gamma
 
         return corner_det_loss, pull_loss, push_loss, corner_off_loss, center_det_loss, center_off_loss
 
@@ -805,9 +805,9 @@ class CenterHead_triple(BaseDenseHead):
                    br_embs,
                    tl_offs,
                    br_offs,
-                   img_metas,
                    center_heats,
                    center_offs,
+                   img_metas,                   
                    rescale=False,
                    with_nms=True):
         """Transform network output for a batch into bbox predictions.
@@ -1051,12 +1051,12 @@ class CenterHead_triple(BaseDenseHead):
         area_bboxes = ((br_xs - tl_xs) * (br_ys - tl_ys)).abs()
 
         # 生成ct点的实际位置，格式和bboxes位置对应
-        ct_heat = self._local_maximum(ct_heat, kernal=kernel)
-        ct_scores, ct_inds, ct_class, ct_ys, ct_xs = self._topk(ct_heat, k=k)
+        ct_heat = self._local_maximum(ct_heat, kernel=kernel)
+        ct_scores, ct_inds, ct_clses, ct_ys, ct_xs = self._topk(ct_heat, k=k)
         # ct_ys = ct_ys.view(batch, k, 1)
         # ct_xs = ct_xs.view(batch, k, 1)
-        ct_ys = ct_ys.view(batch, 1, K).expand(batch, K, K)
-        ct_xs = ct_xs.view(batch, 1, K).expand(batch, K, K)
+        ct_ys = ct_ys.view(batch, 1, k).expand(batch, k, k)
+        ct_xs = ct_xs.view(batch, 1, k).expand(batch, k, k)
         ct_off = self._transpose_and_gather_feat(ct_off, ct_inds)
         # ct_off = ct_off.view(batch, k, 1, 2)
         ct_off = ct_off.view(batch, 1, k, 2)
@@ -1064,12 +1064,12 @@ class CenterHead_triple(BaseDenseHead):
         ct_ys = ct_ys + ct_off[..., 0]
 
         if with_centripetal_shift:
-            print('你这个写的不好使了，回来改center_triplets_head的976行')
+            print('你这个写的不好使了，回来改center_triplets_head的1067行')
         
         ct_xs *= (inp_w / width)
         ct_ys *= (inp_h / height)
         ct_xs -= x_off
-        xt_ys -= y_off
+        ct_ys -= y_off
         ct_xs *= ct_xs.gt(0.0).type_as(ct_xs) 
         ct_ys *= ct_ys.gt(0.0).type_as(ct_ys)
 
@@ -1132,6 +1132,8 @@ class CenterHead_triple(BaseDenseHead):
         tl_clses = tl_clses.view(batch, k, 1).expand(batch, k, k)
         br_clses = br_clses.view(batch, 1, k).expand(batch, k, k)
         cls_inds = (tl_clses != br_clses)
+        # import pdb; pdb.set_trace()
+        ct_clses = ct_clses.view(batch, k, 1).expand(batch, k, k)
 
         # reject boxes based on distances
         dist_inds = dists > distance_threshold
@@ -1161,15 +1163,14 @@ class CenterHead_triple(BaseDenseHead):
         clses = self._gather_feat(clses, inds).float()
 
         tl_scores = tl_scores.contiguous().view(batch, -1, 1)
-        tl_scores = _gather_feat(tl_scores, inds).float()
+        tl_scores = self._gather_feat(tl_scores, inds).float()
         br_scores = br_scores.contiguous().view(batch, -1, 1)
-        br_scores = _gather_feat(br_scores, inds).float()
+        br_scores = self._gather_feat(br_scores, inds).float()
 
         ct_xs = ct_xs[:, 0, :]
         ct_ys = ct_ys[:, 0, :]
 
-        center = torch.cat([ct_xs.unsqueeze(2), ct_ys.unsqueeze(2), ct_clses.float().unsqueeze(2), 
-                            ct_scores.unsqueeze(2)], dim=2)
+        center = torch.cat([ct_xs.unsqueeze(2), ct_ys.unsqueeze(2), ct_clses.float().unsqueeze(2), ct_scores.unsqueeze(2)], dim=2)
         detections = torch.cat([bboxes, scores, tl_scores, br_scores, clses], dim=2)
 
         return detections, center

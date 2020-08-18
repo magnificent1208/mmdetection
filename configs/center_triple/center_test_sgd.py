@@ -5,7 +5,6 @@ _base_ = [
 # model settings
 model = dict(
     type='CenterNet_triple',
-    pretrained='torchvision://',
     backbone=dict(
         type='HourglassNet',
         downsample_times=5,
@@ -94,7 +93,7 @@ test_cfg = dict(
     max_per_img=100,
     nms_cfg=dict(type='soft_nms', iou_threshold=0.5, method='gaussian'))
 # optimizer
-optimizer = dict(type='Adam', lr=2.5e-4)
+optimizer = dict(type='SGD', lr=2.5e-4, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -104,4 +103,4 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     step=[80])
 total_epochs = 100
-work_dir = './work_dirs/center_triple/train_1'
+work_dir = './work_dirs/center_triple/train_2'
