@@ -9,7 +9,9 @@ model = dict(
         heads=dict(hm=80 if use_coco else 21,
             wh=2,
             reg=2)
-        )
+        ),
+    neck=None,
+    
     )
 # # model training and testing settings
 train_cfg = dict(a = 10)

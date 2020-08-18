@@ -19,7 +19,8 @@ from .retina_sepbn_head import RetinaSepBNHead
 from .rpn_head import RPNHead
 from .ssd_head import SSDHead
 
-from .center_triplets_head import CenterHead_triple
+from .center_head_triple import CenterHead_triple
+from .center_head_point import CenterHead_point
 from .center_head import CenterHead
 
 __all__ = [
@@ -27,5 +28,5 @@ __all__ = [
     'RPNHead', 'GARPNHead', 'RetinaHead', 'RetinaSepBNHead', 'GARetinaHead',
     'SSDHead', 'FCOSHead', 'RepPointsHead', 'FoveaHead',
     'FreeAnchorRetinaHead', 'ATSSHead', 'FSAFHead', 'NASFCOSHead',
-    'PISARetinaHead', 'PISASSDHead', 'GFLHead', 'CornerHead', 'CenterHead', 'CenterHead_triple'
+    'PISARetinaHead', 'PISASSDHead', 'GFLHead', 'CornerHead', 'CenterHead', 'CenterHead_triple', 'CenterHead_point'
 ]

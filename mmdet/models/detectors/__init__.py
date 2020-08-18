@@ -22,12 +22,13 @@ from .two_stage import TwoStageDetector
 # from .centernet import CenterNet
 from .centernet_fpn import CenterNetFPN
 from .centernet_triple import CenterNet_triple
+from .centernet_point import CenterNet_point
 
 
 __all__ = [
     'ATSS', 'BaseDetector', 'SingleStageDetector', 'TwoStageDetector', 'RPN',
     'FastRCNN', 'FasterRCNN', 'MaskRCNN', 'CascadeRCNN', 'HybridTaskCascade',
     'RetinaNet', 'FCOS', 'GridRCNN', 'MaskScoringRCNN', 'RepPointsDetector',
-    'FOVEA', 'FSAF', 'NASFCOS', 'PointRend', 'GFL', 'CornerNet','CenterNet_triple', 
-    'CenterNetFPN'
+    'FOVEA', 'FSAF', 'NASFCOS', 'PointRend', 'GFL', 'CornerNet',
+    'CenterNet_triple', 'CenterNetFPN', 'CenterNet_point'
 ]

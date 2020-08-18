@@ -893,7 +893,7 @@ class CenterHead_triple(BaseDenseHead):
             br_heat=br_heat.sigmoid(),
             tl_off=tl_off,
             br_off=br_off,
-            ct_heat=ct_heat,
+            ct_heat=ct_heat.sigmoid(),
             ct_off=ct_off,
             tl_emb=tl_emb,
             br_emb=br_emb,
@@ -977,6 +977,8 @@ class CenterHead_triple(BaseDenseHead):
             - scores (Tensor): Scores of each box.
             - clses (Tensor): Categories of each box.
         """
+        import pdb; pdb.set_trace()
+
         with_embedding = tl_emb is not None and br_emb is not None
         with_centripetal_shift = (
             tl_centripetal_shift is not None
@@ -1061,7 +1063,7 @@ class CenterHead_triple(BaseDenseHead):
         # ct_off = ct_off.view(batch, k, 1, 2)
         ct_off = ct_off.view(batch, 1, k, 2)
         ct_xs = ct_xs + ct_off[..., 0]
-        ct_ys = ct_ys + ct_off[..., 0]
+        ct_ys = ct_ys + ct_off[..., 1]
 
         if with_centripetal_shift:
             print('你这个写的不好使了，回来改center_triplets_head的1067行')
@@ -1141,6 +1143,8 @@ class CenterHead_triple(BaseDenseHead):
         # reject boxes based on widths and heights
         width_inds = (br_xs <= tl_xs)
         height_inds = (br_ys <= tl_ys)
+        
+        # TODO: reject bboxes without center
 
         scores[cls_inds] = -1
         scores[width_inds] = -1

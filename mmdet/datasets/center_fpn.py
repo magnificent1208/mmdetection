@@ -91,7 +91,9 @@ class CenterFPN_dataset(CocoDataset):
         super(CenterFPN_dataset, self).__init__(**kwargs)
         self.use_coco = use_coco
         self.CLASSES = self.CLASSES_2 if use_coco else self.CLASSES_1
-#         print(kwargs)
+        print(kwargs)
+        print(kwargs['pipeline'][2])
+        self.img_scales = kwargs['pipeline'][2]['img_scale']
 
     def _get_border(self, border, size): # 128, 512
         i = 1

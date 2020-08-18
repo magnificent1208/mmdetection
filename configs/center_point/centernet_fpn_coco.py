@@ -164,8 +164,6 @@ log_config = dict(
 # yapf:enable
 # runtime settings
 total_epochs = 12
-device_ids = range(8)
-dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/center_fpn_r50_caffe_fpn_gn_1x_4gpu'
 #load_from = 'pre_train_fpn.pth'

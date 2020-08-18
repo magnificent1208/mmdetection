@@ -3,10 +3,6 @@ import torch
 from mmdet.core import bbox2result, bbox_mapping_back
 from ..builder import DETECTORS
 from .single_stage import SingleStageDetector
-from .two_stage import TwoStageDetector
-
-from ..losses import CtdetLoss
-from .ctdet_decetor import ctdet_decode, post_process, merge_outputs
 
 
 @DETECTORS.register_module()
