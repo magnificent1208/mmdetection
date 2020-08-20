@@ -361,23 +361,21 @@ class CenterHead_point(BaseDenseHead):
                 wh = wh_targets[index_level]
                 offset = offset_targets[index_level]
             
-                # c, s is passed by meta
                 trans_output = get_affine_transform(img_metas['c'], img_metas['s'], 0, [output_w, output_h])
                 bbox[:2] = affine_transform(bbox[:2], trans_output)
                 bbox[2:] = affine_transform(bbox[2:], trans_output)
+                # 将回归框坐标限制到[0, n-1]之间
                 bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, output_w - 1) #x1, x2
                 bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, output_h - 1)
                 h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
-                #print(h, w)
                 # 转换到当层
                 if h > 0 and w > 0:
                     radius = gaussian_radius((math.ceil(h), math.ceil(w)))
                     radius = max(0, int(radius))
                     ct = np.array(
                       [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
-                    #print(ct)
                     ct_int = ct.astype(np.int32)
-                    #hm[cls_id, ct_int[1], ct_int[0]] = 1
+                    hm[cls_id, ct_int[1], ct_int[0]] = 1
 
                     #if (ct_int[1] - 1) > 0:
                     #    hm[cls_id, ct_int[1] - 1, ct_int[0]] = 0.5
@@ -387,6 +385,7 @@ class CenterHead_point(BaseDenseHead):
                     #    hm[cls_id, ct_int[1] + 1, ct_int[0]] = 0.5
                     #if (ct_int[0] + 1) < output_w:
                     #    hm[cls_id, ct_int[1], ct_int[0] + 1] = 0.5
+                    import pdb; pdb.set_trace()
                     draw_umich_gaussian(hm[cls_id], ct_int, radius)
 
                     h, w = 1. * h, 1. * w
@@ -437,7 +436,6 @@ class CenterHead_point(BaseDenseHead):
         wh_targets = torch.tensor(wh_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         offset_targets = torch.from_numpy(np.stack(offset_targets))
         offset_targets = torch.tensor(offset_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
-        import pdb; pdb.set_trace()
         
         return heatmaps_targets, wh_targets, offset_targets
 
@@ -596,6 +594,29 @@ def get_affine_transform(center,
                          output_size,
                          shift=np.array([0, 0], dtype=np.float32),
                          inv=0):
+    """Achieve affine transform with Center, Scale and Rot
+
+    Parameters
+    ----------
+    center : list[x, y]
+        center of affine transform
+    scale : float
+        sclae of linear transform
+    rot : float
+        rotate angle along center
+    output_size : [type]
+        [description]
+    shift : [type], optional
+        [description], by default np.array([0, 0], dtype=np.float32)
+    inv : int, optional
+        [description], by default 0
+
+    Returns
+    -------
+    [type]
+        [description]
+    """
+
     if not isinstance(scale, np.ndarray) and not isinstance(scale, list):
         scale = np.array([scale, scale], dtype=np.float32)
 
