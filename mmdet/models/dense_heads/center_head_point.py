@@ -7,14 +7,15 @@ import math
 #import torch.nn.functional as F
 
 from mmdet.core import multi_apply, multiclass_nms, distance2bbox, force_fp32
+from .base_dense_head import BaseDenseHead
 from ..builder import build_loss, HEADS
-from ..utils import bias_init_with_prob, Scale, ConvModule
+from ..utils import bias_init_with_prob, Scale, ConvModule 
 
 INF = 1e8
 
 
 @HEADS.register_module()
-class CenterHead_point(nn.Module):
+class CenterHead_point(BaseDenseHead):
 
     def __init__(self,
                  num_classes,
@@ -33,7 +34,10 @@ class CenterHead_point(nn.Module):
                  loss_offset = dict(
                     type="L1Loss", loss_weight=1.0),
                  conv_cfg=None,
-                 norm_cfg=dict(type='GN', num_groups=32, requires_grad=True)):
+                 norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
+                 train_cfg=None,
+                 test_cfg=None):
+
         super(CenterHead_point, self).__init__()
 
         self.num_classes = num_classes
@@ -143,7 +147,6 @@ class CenterHead_point(nn.Module):
              gt_bboxes,
              gt_labels,
              img_metas,
-             cfg,
              gt_bboxes_ignore=None):
 
         assert len(cls_scores) == len(wh_preds) == len(offset_preds)
@@ -292,9 +295,8 @@ class CenterHead_point(nn.Module):
                     [offset_targets[i] for offset_targets in offset_targets_list]))
         return concat_lvl_heatmaps, concat_lvl_wh_targets, concat_lvl_offset_targets
 
-
  
-    def center_target_single(self, gt_bboxes, gt_labels, img_meta):
+    def center_target_single(self, gt_bboxes, gt_labels, img_metas):
         """
         single image
         gt_bboxes:torch.Size([6, 4])
@@ -329,8 +331,8 @@ class CenterHead_point(nn.Module):
             bbox = gt_bboxes[k]
             cls_id = gt_labels[k]
             
-            if img_meta['flipped']:
-                bbox[[0, 2]] = img_meta['width'] - bbox[[2, 0]] - 1
+            if img_metas['flipped']:
+                bbox[[0, 2]] = img_metas['width'] - bbox[[2, 0]] - 1
                 
             # condition: in the regress_ranges
             origin_h, origin_w = bbox[3] - bbox[1], bbox[2] - bbox[0]
@@ -360,7 +362,7 @@ class CenterHead_point(nn.Module):
                 offset = offset_targets[index_level]
             
                 # c, s is passed by meta
-                trans_output = get_affine_transform(img_meta['c'], img_meta['s'], 0, [output_w, output_h])
+                trans_output = get_affine_transform(img_metas['c'], img_metas['s'], 0, [output_w, output_h])
                 bbox[:2] = affine_transform(bbox[:2], trans_output)
                 bbox[2:] = affine_transform(bbox[2:], trans_output)
                 bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, output_w - 1) #x1, x2
@@ -435,6 +437,7 @@ class CenterHead_point(nn.Module):
         wh_targets = torch.tensor(wh_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         offset_targets = torch.from_numpy(np.stack(offset_targets))
         offset_targets = torch.tensor(offset_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
+        import pdb; pdb.set_trace()
         
         return heatmaps_targets, wh_targets, offset_targets
 
@@ -444,8 +447,7 @@ class CenterHead_point(nn.Module):
                     cls_scores,
                     wh_preds,
                     offset_preds,
-                    img_metas,
-                    cfg):
+                    img_metas):
         assert len(cls_scores) == len(wh_preds) == len(offset_preds)
         # cls_scores => [num_levels] => [batch featmap] => [batch, 80, h, w]
         # wh_preds  => [num_levels] => [featmap] => [2, h, w]
@@ -475,7 +477,7 @@ class CenterHead_point(nn.Module):
             det_bboxes = self.get_bboxes_single(cls_score_list,  wh_pred_list,
                                                 offset_pred_list,
                                                 featmap_sizes, c, s,
-                                                scale_factor, cfg) # 对每一张图像进行解调
+                                                scale_factor) # 对每一张图像进行解调
             result_list.append(det_bboxes)
         return result_list # [batch_size]
 
@@ -486,8 +488,7 @@ class CenterHead_point(nn.Module):
                         featmap_sizes,
                         c, 
                         s,
-                        scale_factor,
-                        cfg):
+                        scale_factor):
         assert len(cls_scores) == len(wh_preds) == len(offset_preds) == len(featmap_sizes)
         
         detections = []

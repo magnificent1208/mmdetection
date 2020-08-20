@@ -34,17 +34,16 @@ class CenterNet_point(SingleStageDetector):
             pretrained=pretrained)
         self.loss = CtdetLoss()
 
-    def forward_train(self, img, img_meta, **kwargs):
+    def forward_train(self, img, img_metas, **kwargs):
         output = self.backbone(img)
         losses = self.loss(output, **kwargs)
 
-        # import pdb; pdb.set_trace()
-        return losses#, loss_stats
+        return losses
     
-    def forward_test(self, img, img_meta, **kwargs):
+    def forward_test(self, img, img_metas, **kwargs):
         """Test without augmentation."""
 #         assert self.with_bbox, "Bbox head must be implemented."
-#         print("after preprocess\n:", img, img_meta)
+#         print("after preprocess\n:", img, img_metas)
 #        detections = []
 #        for i in range(len(img)):
         output = self.backbone(img.type(torch.cuda.FloatTensor))[-1] # batch, c, h, m
@@ -57,11 +56,11 @@ class CenterNet_point(SingleStageDetector):
     #         print("reg", reg)
         dets = ctdet_decode(hm, wh, reg=reg, K=100)
     #         print("after process:\n", dets)
-    #         print(img_meta)
+    #         print(img_metas)
     #         batch = kwargs
     #         print(batch)
-    #        scale = img_meta[i]['scale'].detach().cpu().numpy()[0]
-        dets = post_process(dets, meta = img_meta, scale=1)
+    #        scale = img_metas[i]['scale'].detach().cpu().numpy()[0]
+        dets = post_process(dets, meta = img_metas, scale=1)
     #         print("after post_process:\n", dets)
 #        detections.append(dets)
         detections = [dets]
@@ -73,11 +72,11 @@ class CenterNet_point(SingleStageDetector):
 
 #         x = self.extract_feat(img)
 #         proposal_list = self.simple_test_rpn(
-#             x, img_meta, self.test_cfg.rpn) if proposals is None else proposals
+#             x, img_metas, self.test_cfg.rpn) if proposals is None else proposals
 
 # input is the output of network, return the det_bboxed, det_labels(0~L-1)
 #         det_bboxes, det_labels = self.simple_test_bboxes(
-#             x, img_meta, proposal_list, self.test_cfg.rcnn, rescale=rescale)
+#             x, img_metas, proposal_list, self.test_cfg.rcnn, rescale=rescale)
 
 #         bbox_results = bbox2result(det_bboxes, det_labels,
 #                                self.backbone.heads['hm'] + 1)

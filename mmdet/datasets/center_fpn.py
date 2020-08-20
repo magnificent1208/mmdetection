@@ -91,9 +91,9 @@ class CenterFPN_dataset(CocoDataset):
         super(CenterFPN_dataset, self).__init__(**kwargs)
         self.use_coco = use_coco
         self.CLASSES = self.CLASSES_2 if use_coco else self.CLASSES_1
-        print(kwargs)
-        print(kwargs['pipeline'][2])
-        self.img_scales = kwargs['pipeline'][2]['img_scale']
+        if len(kwargs['pipeline']) > 3:
+            self.img_scales = kwargs['pipeline'][2]['img_scale']
+            self.img_norm_cfg = kwargs['pipeline'][4]
 
     def _get_border(self, border, size): # 128, 512
         i = 1
@@ -144,7 +144,7 @@ class CenterFPN_dataset(CocoDataset):
             s = np.array([input_w, input_h], dtype=np.float32)
         else:
             s = max(img.shape[0], img.shape[1]) * 1.0
-            input_h, input_w = self.img_scales[0][1], self.img_scales[0][0]
+            input_h, input_w = self.img_scales[1], self.img_scales[0]
 
         flipped = False
         # to random crop
@@ -192,7 +192,7 @@ class CenterFPN_dataset(CocoDataset):
         gt_bboxes = torch.from_numpy(np.stack(gt_bboxes, axis=0))
         gt_labels = torch.from_numpy(np.stack(gt_labels, axis=0))
         #data = dict(img=DC(to_tensor(img), stack=True),img_meta=DC(img_meta, cpu_only=True),gt_bboxes=DC(to_tensor(gt_bboxes)))
-        ret = {'img': DC(inp, stack=True),'img_meta':DC(meta, cpu_only=True), 'gt_bboxes':DC(gt_bboxes), 'gt_labels': DC(gt_labels)}
+        ret = {'img': DC(inp, stack=True),'img_metas':DC(meta, cpu_only=True), 'gt_bboxes':DC(gt_bboxes), 'gt_labels': DC(gt_labels)}
         return ret
     
     def prepare_test_img(self, index):
@@ -266,6 +266,6 @@ class CenterFPN_dataset(CocoDataset):
         meta['scale_factor'] = scale
         #meta['flip_test'] = flip_test
         
-        ret = {'img': DC(images, stack=True), 'img_meta':DC(meta, cpu_only=True)}
+        ret = {'img': DC(images, stack=True), 'img_metas':DC(meta, cpu_only=True)}
         return ret
     

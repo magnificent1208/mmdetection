@@ -1,3 +1,6 @@
+_base_ = [
+    '../_base_/default_runtime.py', '../_base_/datasets/coco_detection.py'
+]
 # model settings
 model = dict(
     type='CenterNetFPN',
@@ -33,7 +36,7 @@ model = dict(
         in_channels=[18, 36, 72, 144],
         out_channels=256),
     bbox_head=dict(
-        type='CenterHead',
+        type='CenterHead_point',
         num_classes=80,
         in_channels=256,
         stacked_convs=1,
@@ -96,55 +99,26 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=4,
-    workers_per_gpu=4,
+    samples_per_gpu=12,
+    workers_per_gpu=12,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_train2017.json',
         img_prefix=data_root + 'train2017/',
         pipeline=train_pipeline),
-        # #img_scale=(1333, 800),
-        # img_scale=(800,800),
-        # #img_scale=(1024,1024),
-        # img_norm_cfg=img_norm_cfg,
-        # size_divisor=31,
-        # flip_ratio=0.5,
-        # with_mask=False,
-        # with_crowd=False,
-        # with_label=True),
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_val2017.json',
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline),
-        # img_scale=(1333, 800),
-        # img_norm_cfg=img_norm_cfg,
-        # size_divisor=31,
-        # flip_ratio=0,
-        # with_mask=False,
-        # with_crowd=False,
-        # with_label=True),
     test=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/instances_val2017.json',
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline))
-        # img_scale=(1333, 800),
-        # img_norm_cfg=img_norm_cfg,
-        # size_divisor=31,
-        # flip_ratio=0,
-        # with_mask=False,
-        # with_crowd=False,
-        # with_label=False,
-        # test_mode=True))
 evaluation = dict(interval=1, metric='bbox')
 # optimizer
 optimizer = dict(type='Adam', lr= 0.00025, betas=(0.9, 0.999), eps=1e-8)
-    #type='SGD',
-    #lr=0.01,
-    #momentum=0.9,
-    #weight_decay=0.0001,
-    #paramwise_options=dict(bias_lr_mult=2., bias_decay_mult=0.))
 optimizer_config = dict(grad_clip=None)
 # learning policy
 lr_config = dict(
@@ -159,14 +133,12 @@ log_config = dict(
     interval=1,
     hooks=[
         dict(type='TextLoggerHook'),
-        # dict(type='TensorboardLoggerHook')
     ])
 # yapf:enable
 # runtime settings
 total_epochs = 12
 log_level = 'INFO'
 work_dir = './work_dirs/center_fpn_r50_caffe_fpn_gn_1x_4gpu'
-#load_from = 'pre_train_fpn.pth'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]
