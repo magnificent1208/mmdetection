@@ -2,6 +2,11 @@ import argparse
 import copy
 import os
 import os.path as osp
+import sys
+try:
+    sys.path.remove('/home/maggie/anaconda3/envs/center/lib/python3.6/site-packages')
+except:
+    pass
 import time
 
 import mmcv
