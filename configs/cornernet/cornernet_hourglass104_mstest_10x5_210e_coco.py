@@ -23,8 +23,8 @@ model = dict(
             type='GaussianFocalLoss', alpha=2.0, gamma=4.0, loss_weight=1),
         loss_embedding=dict(
             type='AssociativeEmbeddingLoss',
-            pull_weight=0.25,
-            push_weight=0.25),
+            pull_weight=0.10,
+            push_weight=0.10),
         loss_offset=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1)))
 # data settings
 img_norm_cfg = dict(
@@ -78,8 +78,8 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=1,
+    samples_per_gpu=5,
+    workers_per_gpu=3,
     train=dict(pipeline=train_pipeline),
     val=dict(pipeline=test_pipeline),
     test=dict(pipeline=test_pipeline))

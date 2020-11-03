@@ -1,3 +1,4 @@
+from .darknet import Darknet
 from .detectors_resnet import DetectoRS_ResNet
 from .detectors_resnext import DetectoRS_ResNeXt
 from .hourglass import HourglassNet
@@ -8,9 +9,7 @@ from .resnet import ResNet, ResNetV1d
 from .resnext import ResNeXt
 from .ssd_vgg import SSDVGG
 
-from .hrnet4 import HRNet4
-
 __all__ = [
     'RegNet', 'ResNet', 'ResNetV1d', 'ResNeXt', 'SSDVGG', 'HRNet', 'Res2Net',
-    'HourglassNet', 'DetectoRS_ResNet', 'DetectoRS_ResNeXt','HRNet4'
+    'HourglassNet', 'DetectoRS_ResNet', 'DetectoRS_ResNeXt', 'Darknet'
 ]

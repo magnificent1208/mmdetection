@@ -69,7 +69,6 @@ class HourglassModule(nn.Module):
 
     def forward(self, x):
         """Forward function."""
-        # import pdb; pdb.set_trace()
         up1 = self.up1(x)
         low1 = self.low1(x)
         low2 = self.low2(low1)
@@ -172,7 +171,10 @@ class HourglassNet(nn.Module):
         Detector's __init__() will call backbone's init_weights() with
         pretrained as input, so we keep this function.
         """
-        pass
+        # Training Centripetal Model needs to reset parameters for Conv2d
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                m.reset_parameters()
 
     def forward(self, x):
         """Forward function."""

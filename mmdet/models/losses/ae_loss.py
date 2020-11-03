@@ -84,8 +84,8 @@ class AssociativeEmbeddingLoss(nn.Module):
 
     def __init__(self, pull_weight=0.25, push_weight=0.25):
         super(AssociativeEmbeddingLoss, self).__init__()
-        self.pull_weight = pull_weight # α in ae_loss
-        self.push_weight = push_weight # β in ae_loss  
+        self.pull_weight = pull_weight
+        self.push_weight = push_weight
 
     def forward(self, pred, target, match):
         """Forward function."""

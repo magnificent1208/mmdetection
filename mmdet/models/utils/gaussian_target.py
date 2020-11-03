@@ -1,6 +1,6 @@
 from math import sqrt
+
 import torch
-import numpy as np
 
 
 def gaussian2D(radius, sigma=1, dtype=torch.float32, device='cpu'):
@@ -26,7 +26,6 @@ def gaussian2D(radius, sigma=1, dtype=torch.float32, device='cpu'):
     h[h < torch.finfo(h.dtype).eps * h.max()] = 0
     return h
 
-#Exactly the same as draw_umich_gaussian in centernet_points
 def gen_gaussian_target(heatmap, center, radius, k=1):
     """Generate 2D gaussian heatmap.
 
@@ -54,7 +53,7 @@ def gen_gaussian_target(heatmap, center, radius, k=1):
     masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
     masked_gaussian = gaussian_kernel[radius - top:radius + bottom,
                                       radius - left:radius + right]
-    out_heatmap = torch.zeros_like(heatmap)
+    out_heatmap = heatmap
     torch.max(
         masked_heatmap,
         masked_gaussian * k,
@@ -183,4 +182,3 @@ def gaussian_radius(det_size, min_overlap):
     sq3 = sqrt(b3**2 - 4 * a3 * c3)
     r3 = (b3 + sq3) / (2 * a3)
     return min(r1, r2, r3)
-

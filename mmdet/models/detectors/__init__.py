@@ -13,22 +13,21 @@ from .htc import HybridTaskCascade
 from .mask_rcnn import MaskRCNN
 from .mask_scoring_rcnn import MaskScoringRCNN
 from .nasfcos import NASFCOS
+from .paa import PAA
 from .point_rend import PointRend
 from .reppoints_detector import RepPointsDetector
 from .retinanet import RetinaNet
 from .rpn import RPN
 from .single_stage import SingleStageDetector
 from .two_stage import TwoStageDetector
-# from .centernet import CenterNet
-from .centernet_fpn import CenterNetFPN
-from .centernet_triple import CenterNet_triple
-from .centernet_point import CenterNet_point
-
+from .vfnet import VFNet
+from .yolact import YOLACT
+from .yolo import YOLOV3
 
 __all__ = [
     'ATSS', 'BaseDetector', 'SingleStageDetector', 'TwoStageDetector', 'RPN',
     'FastRCNN', 'FasterRCNN', 'MaskRCNN', 'CascadeRCNN', 'HybridTaskCascade',
     'RetinaNet', 'FCOS', 'GridRCNN', 'MaskScoringRCNN', 'RepPointsDetector',
-    'FOVEA', 'FSAF', 'NASFCOS', 'PointRend', 'GFL', 'CornerNet',
-    'CenterNet_triple', 'CenterNetFPN', 'CenterNet_point'
+    'FOVEA', 'FSAF', 'NASFCOS', 'PointRend', 'GFL', 'CornerNet', 'PAA',
+    'YOLOV3', 'YOLACT', 'VFNet'
 ]
