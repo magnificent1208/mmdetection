@@ -89,13 +89,24 @@ def cityscapes_classes():
     ]
 
 
+def dota_classes():
+    return [
+        'plane', 'baseball-diamond', 'bridge', 'ground-track-field', 
+        'small-vehicle', 'large-vehicle', 'ship', 
+        'tennis-court', 'basketball-court',  
+        'storage-tank', 'soccer-ball-field', 
+        'roundabout', 'harbor', 
+        'swimming-pool', 'helicopter','container-crane'
+    ]
+
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
     'imagenet_det': ['det', 'imagenet_det', 'ilsvrc_det'],
     'imagenet_vid': ['vid', 'imagenet_vid', 'ilsvrc_vid'],
     'coco': ['coco', 'mscoco', 'ms_coco'],
     'wider_face': ['WIDERFaceDataset', 'wider_face', 'WDIERFace'],
-    'cityscapes': ['cityscapes']
+    'cityscapes': ['cityscapes'],
+    'dota': ['dota']
 }
 
 

@@ -6,8 +6,7 @@ import cv2
 import math
 
 
-from mmdet.core import multi_apply, multiclass_nms, distance2bbox
-from mmcv.runner import force_fp32
+from mmdet.core import multi_apply, multiclass_nms, distance2bbox, force_fp32
 from ..builder import build_loss, HEADS
 from mmcv.cnn import ConvModule, Scale, bias_init_with_prob, normal_init
 from ..utils import gaussian_radius, gen_gaussian_target
@@ -40,9 +39,6 @@ class CenterHead(nn.Module):
                      type='SmoothL1Loss', 
                      beta=1.0, 
                      loss_weight=1),
-                 loss_rot=dict(
-                     type='SmoothL1Loss',
-                     loss_weight=1),
                  conv_cfg=None,
                  norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
                  **kwargs):
@@ -60,7 +56,6 @@ class CenterHead(nn.Module):
         self.loss_hm = build_loss(loss_hm)
         self.loss_wh = build_loss(loss_wh)
         self.loss_offset = build_loss(loss_offset)
-        self.loss_rot = build_loss(loss_rot)
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.fp16_enabled = False
@@ -72,7 +67,6 @@ class CenterHead(nn.Module):
         self.cls_convs = nn.ModuleList()
         self.wh_convs = nn.ModuleList()
         self.offset_convs = nn.ModuleList()
-        self.rot_convs = nn.ModuleList()
         for i in range(self.stacked_convs):
             chn = self.in_channels if i == 0 else self.feat_channels
             self.cls_convs.append(
@@ -105,20 +99,9 @@ class CenterHead(nn.Module):
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg,
                     bias=self.norm_cfg is None))
-            self.rot_convs.append(
-                ConvModule(
-                    chn,
-                    self.feat_channels,
-                    3,
-                    stride=1,
-                    padding=1,
-                    conv_cfg=self.conv_cfg,
-                    norm_cfg=self.norm_cfg,
-                    bias=self.norm_cfg is None))
         self.center_hm = nn.Conv2d(self.feat_channels, self.cls_out_channels, 3, padding=1, bias=True)
         self.center_wh = nn.Conv2d(self.feat_channels, 2, 3, padding=1, bias=True)
         self.center_offset = nn.Conv2d(self.feat_channels, 2, 3, padding=1, bias=True)
-        self.center_rot = nn.Conv2d(self.feat_channels, 1, 3, padding=1, bias=True)
         self.scales = nn.ModuleList([Scale(1.0) for _ in self.strides])
 
     def init_weights(self):
@@ -127,6 +110,7 @@ class CenterHead(nn.Module):
         nn.init.constant_(self.center_wh.bias, 0)
         nn.init.constant_(self.center_offset.bias, 0)
 
+
     def forward(self, feats):
         return multi_apply(self.forward_single, feats, self.scales)
 
@@ -134,7 +118,6 @@ class CenterHead(nn.Module):
         cls_feat = x
         wh_feat = x
         offset_feat = x
-        rot_feat = x
 
         for cls_layer in self.cls_convs:
             cls_feat = cls_layer(cls_feat)
@@ -147,12 +130,8 @@ class CenterHead(nn.Module):
         for offset_layer in self.offset_convs:
             offset_feat = offset_layer(offset_feat)
         offset_pred = self.center_offset(offset_feat)
-
-        for rot_layer in self.rot_convs:
-            rot_feat = rot_layer(rot_feat)
-        rot_pred = self.center_rot(rot_feat)
         
-        return cls_score, wh_pred, offset_pred, rot_pred
+        return cls_score, wh_pred, offset_pred
 
     @force_fp32(apply_to=('cls_scores', 'wh_preds', 'offset_preds', 'rot_preds'))
     def loss(self,
@@ -163,6 +142,7 @@ class CenterHead(nn.Module):
              gt_bboxes,
              gt_labels,
              img_metas,
+             cfg,
              gt_bboxes_ignore=None):
 
         assert len(cls_scores) == len(wh_preds) == len(offset_preds) == len(rot_preds)
@@ -174,7 +154,10 @@ class CenterHead(nn.Module):
 
         self.tensor_dtype = offset_preds[0].dtype
         self.tensor_device = offset_preds[0].device
-        heatmaps, wh_targets, offset_targets, rot_targets = self.center_target(gt_bboxes, gt_labels, img_metas, all_level_points)
+        heatmaps, wh_targets, offset_targets, rot_targets = self.center_target(gt_bboxes, 
+                                                                               gt_labels,
+                                                                               img_metas,
+                                                                               all_level_points) # 所有层的concat的， 每张图对应一个
 
         num_imgs = cls_scores[0].size(0) # batch_size
 
@@ -192,20 +175,18 @@ class CenterHead(nn.Module):
             for offset_pred in offset_preds
         ]
         flatten_rot_preds = [
-            rot_pred.permute(0, 2, 3, 1).reshape(-1, 2)
+            rot_pred.permute(0, 2, 3, 1).reshape(-1, 1)
             for rot_pred in rot_preds
         ]
-       
+        
         flatten_cls_scores = torch.cat(flatten_cls_scores)
         flatten_wh_preds = torch.cat(flatten_wh_preds)
         flatten_offset_preds = torch.cat(flatten_offset_preds)
-        flatten_rot_preds = torch.cat(flatten_rot_preds)
        
         # targets
         flatten_heatmaps = torch.cat(heatmaps)
         flatten_wh_targets = torch.cat(wh_targets) # torch.Size([all_level_points, 2])
         flatten_offset_targets = torch.cat(offset_targets)
-        flatten_rot_targets = torch.cat(rot_targets)
 
         # repeat points to align with bbox_preds
         # flatten_points = torch.cat(
@@ -227,13 +208,11 @@ class CenterHead(nn.Module):
         loss_hm = self.loss_hm(flatten_cls_scores, flatten_heatmaps)
         
         pos_wh_targets = flatten_wh_targets[center_inds]
+        #print(pos_wh_targets.shape)
         pos_wh_preds = flatten_wh_preds[center_inds]
         
         pos_offset_preds = flatten_offset_preds[center_inds]
         pos_offset_targets = flatten_offset_targets[center_inds]
-
-        pos_rot_preds = flatten_rot_preds[center_inds]
-        pos_rot_targets = flatten_rot_targets[center_inds]
         
         if num_center > 0:
             # TODO: use the iou loss
@@ -244,57 +223,14 @@ class CenterHead(nn.Module):
             #loss_wh = F.l1_loss(pos_wh_preds, pos_wh_targets, reduction='sum') / (num_center + num_imgs)
             #loss_wh = 0.1 * loss_wh
             loss_offset = self.loss_offset(pos_offset_preds, pos_offset_targets, avg_factor=num_center + num_imgs)
-            loss_rot = self.loss_rot(pos_rot_preds, pos_rot_targets, avg_factor=num_center + num_imgs)
         else:
             loss_wh = pos_wh_preds.sum()
             loss_offset = pos_offset_preds.sum()
-            loss_rot = pos_rot_preds.sum()
-    
+     
         return dict(
               loss_hm = loss_hm,
               loss_wh = loss_wh,
-              loss_offset = loss_offset,
-              loss_rot = loss_rot)
-
-    def forward_train(self,
-                      x,
-                      img_metas,
-                      gt_bboxes,
-                      gt_labels=None,
-                      gt_bboxes_ignore=None,
-                      proposal_cfg=None,
-                      **kwargs):
-        """
-        Args:
-            x (list[Tensor]): Features from FPN.
-            img_metas (list[dict]): Meta information of each image, e.g.,
-                image size, scaling factor, etc.
-            gt_bboxes (Tensor): Ground truth bboxes of the image,
-                shape (num_gts, 4).
-            gt_labels (Tensor): Ground truth labels of each box,
-                shape (num_gts,).
-            gt_bboxes_ignore (Tensor): Ground truth bboxes to be
-                ignored, shape (num_ignored_gts, 4).
-            proposal_cfg (mmcv.Config): Test / postprocessing configuration,
-                if None, test_cfg would be used
-
-        Returns:
-            tuple:
-                losses: (dict[str, Tensor]): A dictionary of loss components.
-                proposal_list (list[Tensor]): Proposals of each image.
-        """
-        outs = self(x)
-        # out: (tl_heat, br_heat, tl_emb, br_emb, tl_off, br_off, ct_heat, ct_off)
-        if gt_labels is None:
-            loss_inputs = outs + (gt_bboxes, img_metas)
-        else:
-            loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
-        losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
-        if proposal_cfg is None:
-            return losses
-        else:
-            proposal_list = self.get_bboxes(*outs, img_metas, cfg=proposal_cfg)
-            return losses, proposal_list
+              loss_offset = loss_offset)
 
     def get_points(self, featmap_sizes, dtype, device):
         """Get points according to feature map sizes.
@@ -323,7 +259,6 @@ class CenterHead(nn.Module):
             (x.reshape(-1), y.reshape(-1)), dim=-1) + stride // 2
         return points
 
-    # TODO: 20201116 update for rot 
     def center_target(self, gt_bboxes_list, gt_labels_list, img_metas, all_level_points):
 
         assert len(self.featmap_sizes) == len(self.regress_ranges)
@@ -362,7 +297,6 @@ class CenterHead(nn.Module):
         return concat_lvl_heatmaps, concat_lvl_wh_targets, concat_lvl_offset_targets
 
 
-    # TODO: 20201116 update for rot 
     def center_target_single(self, gt_bboxes, gt_labels, img_meta):
         """
         single image
@@ -393,13 +327,12 @@ class CenterHead(nn.Module):
             offset = np.zeros((h, w, 2), dtype=np.float32)
             offset_targets.append(offset)
 
-        import pdb; pdb.set_trace()
         for k in range(num_objs):
             bbox = gt_bboxes[k]
             cls_id = gt_labels[k]
             
-            # if img_meta['flip']:
-            #     bbox[[0, 2]] = img_meta['width'] - bbox[[2, 0]] - 1
+            if img_meta['flipped']:
+                bbox[[0, 2]] = img_meta['width'] - bbox[[2, 0]] - 1
                 
             # condition: in the regress_ranges
             origin_h, origin_w = bbox[3] - bbox[1], bbox[2] - bbox[0]
@@ -429,7 +362,6 @@ class CenterHead(nn.Module):
                 offset = offset_targets[index_level]
             
                 # c, s is passed by meta
-                import pdb; pdb.set_trace()
                 trans_output = get_affine_transform(img_meta['c'], img_meta['s'], 0, [output_w, output_h])
                 bbox[:2] = affine_transform(bbox[:2], trans_output)
                 bbox[2:] = affine_transform(bbox[2:], trans_output)
