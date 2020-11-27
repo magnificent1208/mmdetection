@@ -42,7 +42,9 @@ class CenterNet_Simple(SingleStageDetector):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
-        x = self.extract_feat(img)
+        # x = self.extract_feat(img)
+        x = self.backbone(img)
+        # import pdb; pdb.set_trace()
         if self.neck:
             x = self.neck(x)
         losses = self.bbox_head.forward_train(x, img_metas, gt_bboxes,

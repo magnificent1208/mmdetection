@@ -59,7 +59,8 @@ class Resize(object):
                  multiscale_mode='range',
                  ratio_range=None,
                  keep_ratio=True,
-                 backend='cv2'):
+                 backend='cv2',
+                 is_rot=False):
         if img_scale is None:
             self.img_scale = None
         else:
@@ -80,6 +81,7 @@ class Resize(object):
         self.multiscale_mode = multiscale_mode
         self.ratio_range = ratio_range
         self.keep_ratio = keep_ratio
+        self.is_rot = is_rot
 
     @staticmethod
     def random_select(img_scales):
@@ -221,10 +223,13 @@ class Resize(object):
         """Resize bounding boxes with ``results['scale_factor']``."""
         img_shape = results['img_shape']
         for key in results.get('bbox_fields', []):
-            bboxes = results[key] * results['scale_factor']
-            bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, img_shape[1])
-            bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0])
-            results[key] = bboxes
+            if self.is_rot:
+                results[key][:, :4] *= results['scale_factor']
+            else:
+                bboxes = results[key] * results['scale_factor']
+                bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, img_shape[1]) # x::y, 从x开始间隔为y 
+                bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0])
+                results[key] = bboxes
 
     def _resize_masks(self, results):
         """Resize masks with ``results['scale']``"""

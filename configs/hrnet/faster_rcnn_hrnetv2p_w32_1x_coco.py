@@ -34,3 +34,10 @@ model = dict(
         type='HRFPN',
         in_channels=[32, 64, 128, 256],
         out_channels=256))
+# learning policy
+lr_config = dict(
+    policy='step',
+    warmup='linear',
+    warmup_iters=500,
+    warmup_ratio=0.0005,
+    step=[8, 11])

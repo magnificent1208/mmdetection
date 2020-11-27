@@ -39,7 +39,7 @@ model = dict(
         out_channels=256),
     bbox_head=dict(
         type='CenterHead',
-        num_classes=80,
+        num_classes=16,
         in_channels=256,
         stacked_convs=1,
         feat_channels=256,
@@ -61,7 +61,7 @@ train_cfg = dict(
         ignore_iof_thr=-1),
     allowed_border=-1,
     pos_weight=-1,
-    debug=False
+    debug=False,
 )
 test_cfg = dict(
     a = 5
@@ -79,12 +79,15 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
-    dict(type='RandomFlip', flip_ratio=0.5),
+    dict(type='Resize', img_scale=(1333, 800), keep_ratio=True, is_rot=True),
+    # dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
+    dict(type='Collect', 
+         keys=['img', 'gt_bboxes', 'gt_labels'],
+         meta_keys=('filename', 'ori_filename', 'ori_shape',
+                    'img_shape', 'pad_shape','img_norm_cfg')),
 ]
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -94,7 +97,7 @@ test_pipeline = [
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
-            dict(type='RandomFlip'),
+            # dict(type='RandomFlip'),
             dict(type='Normalize', **img_norm_cfg),
             dict(type='Pad', size_divisor=32),
             dict(type='ImageToTensor', keys=['img']),
@@ -102,8 +105,8 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=2,
+    samples_per_gpu=8,
+    workers_per_gpu=4,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'train/ImageSets/Main/train.txt',
@@ -119,9 +122,19 @@ data = dict(
         ann_file=data_root + 'train/ImageSets/Main/test.txt',
         img_prefix=data_root + 'train/',
         pipeline=test_pipeline))
-evaluation = dict(interval=1, metric='bbox')
+evaluation = dict(interval=100, metric='bbox')
+optimizer = dict(type='SGD', lr=0.001, momentum=0.9, weight_decay=0.0001)
+optimizer_config = dict(grad_clip=None)
+# learning policy
+lr_config = dict(
+    policy='step',
+    warmup='linear',
+    warmup_iters=500,
+    warmup_ratio=0.001,
+    step=[24, 32])
+total_epochs = 40
 # Runtime Setting
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=5)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -136,3 +149,4 @@ work_dir = './work_dirs/center_simple'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]
+find_unused_parameters=True

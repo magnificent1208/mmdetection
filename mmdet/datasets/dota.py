@@ -43,9 +43,8 @@ class DotaDataset(XMLDataset):
                 'roundabout', 'harbor', 
                 'swimming-pool', 'helicopter','container-crane')
 
-    # def __init__(self, **kwargs):
-    #     super(DotaDataset, self).__init__()
-
+    def __init__(self, **kwargs):
+        super(DotaDataset, self).__init__(**kwargs)
 
         # self.num_classes = 16
         # self.class_names = DOTA_NAMES
@@ -134,14 +133,13 @@ class DotaDataset(XMLDataset):
         bboxes_ignore = []
         labels_ignore = []
         for obj in root.findall('object'):
-            name = obj.find('name').text
+            name = obj.find('label').text
             if name not in self.CLASSES:
                 continue
             label = self.cat2label[name]
             difficult = int(obj.find('difficult').text)
             bnd_box = obj.find('bndbox')
             # Coordinates may be float type
-            
             bbox = [
                 int(float(bnd_box.find('x0').text)),
                 int(float(bnd_box.find('y0').text)),
@@ -196,8 +194,8 @@ class DotaDataset(XMLDataset):
             n_bboxes.append([cx, cy, w, h, theta])
 
         ann = dict(
-            bboxes=n_bboxes.astype(np.float32),
-            labels=labels.astype(np.int64),
+            bboxes=np.array(n_bboxes).astype(np.float32),
+            labels=np.array(labels).astype(np.int64),
             bboxes_ignore=bboxes_ignore.astype(np.float32),
             labels_ignore=labels_ignore.astype(np.int64))
         return ann
@@ -247,82 +245,77 @@ class DotaDataset(XMLDataset):
                 valid_inds.append(i)
         return valid_inds
 
-    def __getitem__(self, index):
-        import pdb; pdb.set_trace()
-        img_name = self.images[index]
-        img_path = os.path.join(self.img_dir, img_name + '.png')
-        ann_path = os.path.join(self.xml_dir, img_name + '.xml')
-        labels, bboxes = self.read_xml(ann_path)
+    # def __getitem__(self, index):
+    #     img_info = self.data_infos[index]
+    #     ann_info = self.get_ann_info(index)
+    #     pipline = self.pipeline
+    #     labels, bboxes = ann_info['labels'], ann_info['bboxes']
 
-        labels = np.array(labels) # index: 1-15
-        bboxes = np.array(bboxes) # x0y0x1y1x2y2x3y3
-        bboxes = self.norm_bboxes(bboxes) # cx, cy, w, h, theta
+    #     img = cv2.imread(img_path)
+    #     height, width = img_info['height'], img_info['width']
+    #     # 获取中心坐标p
+    #     center = np.array([width / 2., height / 2.],
+    #                         dtype=np.float32)  # center of image
+    #     scale = max(height, width) * 1.0  # 仿射变换
 
-        img = cv2.imread(img_path)
-        height, width = img.shape[0], img.shape[1]
-        # 获取中心坐标p
-        center = np.array([width / 2., height / 2.],
-                            dtype=np.float32)  # center of image
-        scale = max(height, width) * 1.0  # 仿射变换
+    #     # 仿射变换
+    #     trans_img = get_affine_transform(
+    #         center, scale, 0, [self.img_size['w'], self.img_size['h']])
+    #     img = cv2.warpAffine(
+    #         img, trans_img, (self.img_size['w'], self.img_size['h']))
 
-        # 仿射变换
-        trans_img = get_affine_transform(
-            center, scale, 0, [self.img_size['w'], self.img_size['h']])
-        img = cv2.warpAffine(
-            img, trans_img, (self.img_size['w'], self.img_size['h']))
+    #     # 归一化
+    #     img = (img.astype(np.float32) / 255.)
+    #     # img -= self.mean
+    #     # img /= self.std
+    #     img = img.transpose(2, 0, 1)  # from [H, W, C] to [C, H, W]
 
-        # 归一化
-        img = (img.astype(np.float32) / 255.)
-        # img -= self.mean
-        # img /= self.std
-        img = img.transpose(2, 0, 1)  # from [H, W, C] to [C, H, W]
+    #     # 对Ground Truth heatmap进行仿射变换
+    #     trans_fmap = get_affine_transform(
+    #         center, scale, 0, [self.fmap_size['w'], self.fmap_size['h']]) # 这时候已经是下采样为原来的四分之一了
 
-        # 对Ground Truth heatmap进行仿射变换
-        trans_fmap = get_affine_transform(
-            center, scale, 0, [self.fmap_size['w'], self.fmap_size['h']]) # 这时候已经是下采样为原来的四分之一了
+    #     # 3个最重要的变量
+    #     hmap = np.zeros(
+    #         (self.num_classes, self.fmap_size['h'], self.fmap_size['w']), dtype=np.float32)  # heatmap
+    #     w_h_ = np.zeros((self.max_objs, 2), dtype=np.float32)  # width and height
+    #     regs = np.zeros((self.max_objs, 2), dtype=np.float32)  # regression
+    #     rot = np.zeros((self.max_objs, 1), dtype=np.float32)
 
-        # 3个最重要的变量
-        hmap = np.zeros(
-            (self.num_classes, self.fmap_size['h'], self.fmap_size['w']), dtype=np.float32)  # heatmap
-        w_h_ = np.zeros((self.max_objs, 2), dtype=np.float32)  # width and height
-        regs = np.zeros((self.max_objs, 2), dtype=np.float32)  # regression
-        rot = np.zeros((self.max_objs, 1), dtype=np.float32)
+    #     # indexs
+    #     inds = np.zeros((self.max_objs,), dtype=np.int64)
+    #     # 具体选择哪些index
+    #     ind_masks = np.zeros((self.max_objs,), dtype=np.uint8)
 
-        # indexs
-        inds = np.zeros((self.max_objs,), dtype=np.int64)
-        # 具体选择哪些index
-        ind_masks = np.zeros((self.max_objs,), dtype=np.uint8)
+    #     if len(bboxes) > self.max_objs:
+    #         bboxes, labels = bboxes[:self.max_objs], labels[:self.max_objs]
 
-        if len(bboxes) > self.max_objs:
-            bboxes, labels = bboxes[:self.max_objs], labels[:self.max_objs]
+    #     for k, (bbox, label) in enumerate(zip(bboxes, labels)):
+    #         # 对检测框也进行仿射变换
+    #         bbox[:2] = affine_transform(bbox[:2], trans_fmap)
+    #         bbox[2:4] = affine_transform(bbox[2:4], trans_fmap)
+    #         w, h = bbox[2:4]
 
-        for k, (bbox, label) in enumerate(zip(bboxes, labels)):
-            # 对检测框也进行仿射变换
-            bbox[:2] = affine_transform(bbox[:2], trans_fmap)
-            bbox[2:4] = affine_transform(bbox[2:4], trans_fmap)
-            w, h = bbox[2:4]
+    #         if bbox[2] > 0 and bbox[3] > 0:
+    #             obj_c = np.array(bbox[:2], dtype=np.float32) # 中心坐标-浮点型
+    #             obj_c_int = obj_c.astype(np.int32) # 整型的中心坐标
+    #             # 根据一元二次方程计算出最小的半径
+    #             radius = max(0, int(gaussian_radius((math.ceil(h), math.ceil(w)), self.gaussian_iou)))
+    #             # 得到高斯分布
+    #             draw_umich_gaussian(hmap[label], obj_c_int, radius)
 
-            if bbox[2] > 0 and bbox[3] > 0:
-                obj_c = np.array(bbox[:2], dtype=np.float32) # 中心坐标-浮点型
-                obj_c_int = obj_c.astype(np.int32) # 整型的中心坐标
-                # 根据一元二次方程计算出最小的半径
-                radius = max(0, int(gaussian_radius((math.ceil(h), math.ceil(w)), self.gaussian_iou)))
-                # 得到高斯分布
-                draw_umich_gaussian(hmap[label], obj_c_int, radius)
-
-                w_h_[k] = 1. * w, 1. * h
+    #             w_h_[k] = 1. * w, 1. * h
                 
-                # 记录偏移量
-                regs[k] = obj_c - obj_c_int  # discretization error
-                # 当前是obj序列中的第k个 = fmap_w * cy + cx = fmap中的序列数
-                inds[k] = obj_c_int[1] * self.fmap_size['w'] + obj_c_int[0]
-                # 进行mask标记
-                ind_masks[k] = 1
-                rot[k] = bbox[4]
+    #             # 记录偏移量
+    #             regs[k] = obj_c - obj_c_int  # discretization error
+    #             # 当前是obj序列中的第k个 = fmap_w * cy + cx = fmap中的序列数
+    #             inds[k] = obj_c_int[1] * self.fmap_size['w'] + obj_c_int[0]
+    #             # 进行mask标记
+    #             ind_masks[k] = 1
+    #             rot[k] = bbox[4]
 
-        return {'image': img, 'hmap': hmap, 'w_h_': w_h_, 'regs': regs, 
-                'inds': inds, 'ind_masks': ind_masks, 'c': center, 'rot': rot,
-                's': scale, 'img_id': img_name}
+    #     return {'image': img, 'hmap': hmap, 'w_h_': w_h_, 'regs': regs, 
+    #             'inds': inds, 'ind_masks': ind_masks, 'c': center, 'rot': rot,
+    #             's': scale, 'img_id': img_name}
 
     def evaluate(self,
                  results,

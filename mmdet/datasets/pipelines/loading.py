@@ -219,6 +219,7 @@ class LoadAnnotations(object):
                  with_seg=False,
                  poly2mask=True,
                  file_client_args=dict(backend='disk')):
+        
         self.with_bbox = with_bbox
         self.with_label = with_label
         self.with_mask = with_mask

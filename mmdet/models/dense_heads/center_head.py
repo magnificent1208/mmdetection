@@ -65,6 +65,7 @@ class CenterHead(nn.Module):
         self.norm_cfg = norm_cfg
         self.fp16_enabled = False
         self.use_cross = use_cross
+        self.gaussian_iou = 0.7
 
         self._init_layers()
 
@@ -192,7 +193,7 @@ class CenterHead(nn.Module):
             for offset_pred in offset_preds
         ]
         flatten_rot_preds = [
-            rot_pred.permute(0, 2, 3, 1).reshape(-1, 2)
+            rot_pred.permute(0, 2, 3, 1).reshape(-1, 1)
             for rot_pred in rot_preds
         ]
        
@@ -218,7 +219,7 @@ class CenterHead(nn.Module):
         #print(center_inds)
         num_center = len(center_inds)
         #print(num_center)
-        
+
         # what about use the centerness * labels to indict an object
         # loss_cls = self.loss_cls(
         #     flatten_cls_scores, flatten_labels, # labels gt is small area
@@ -331,12 +332,8 @@ class CenterHead(nn.Module):
         # get heatmaps and targets of each image
         # heatmaps in heatmaps_list: [num_points, 80]
         # wh_targets: [num_points, 2] => [batch_size, num_points, 2]
-        heatmaps_list, wh_targets_list, offset_targets_list = multi_apply(
-            self.center_target_single,
-            gt_bboxes_list,
-            gt_labels_list,
-            img_metas
-            )
+        heatmaps_list, wh_targets_list, offset_targets_list, rot_targets_list = multi_apply(
+            self.center_target_single, gt_bboxes_list, gt_labels_list, img_metas)
 
         # split to per img, per level
         num_points = [center.size(0) for center in all_level_points] # 每一层多少个点 all_level_points [[12414, 2], []]
@@ -344,11 +341,13 @@ class CenterHead(nn.Module):
         heatmaps_list = [heatmaps.split(num_points, 0) for heatmaps in heatmaps_list]
         wh_targets_list = [wh_targets.split(num_points, 0) for wh_targets in wh_targets_list]
         offset_targets_list = [offset_targets.split(num_points, 0) for offset_targets in offset_targets_list]
+        rot_targets_list = [rot_targets.split(num_points, 0) for rot_targets in rot_targets_list]
 
         # concat per level image, 同一层的concat # [(batch_size，featmap_size[1]), ...)
         concat_lvl_heatmaps = []
         concat_lvl_wh_targets = []
         concat_lvl_offset_targets = []
+        concat_lvl_rot_targets = []
         num_levels = len(self.featmap_sizes)
         for i in range(num_levels):
             concat_lvl_heatmaps.append(
@@ -359,7 +358,10 @@ class CenterHead(nn.Module):
             concat_lvl_offset_targets.append(
                 torch.cat(
                     [offset_targets[i] for offset_targets in offset_targets_list]))
-        return concat_lvl_heatmaps, concat_lvl_wh_targets, concat_lvl_offset_targets
+            concat_lvl_rot_targets.append(
+                torch.cat(
+                    [rot_targets[i] for rot_targets in rot_targets_list]))        
+        return concat_lvl_heatmaps, concat_lvl_wh_targets, concat_lvl_offset_targets, concat_lvl_rot_targets
 
 
     # TODO: 20201116 update for rot 
@@ -374,6 +376,7 @@ class CenterHead(nn.Module):
         # transform the gt_bboxes, gt_labels to numpy
         gt_bboxes = gt_bboxes.data.cpu().numpy()
         gt_labels = gt_labels.data.cpu().numpy()
+        img_w, img_h = img_meta['img_shape'][:2]
         
         num_objs = gt_labels.shape[0]
 
@@ -383,67 +386,57 @@ class CenterHead(nn.Module):
         heatmaps_targets = []
         wh_targets = []
         offset_targets = []
+        rot_targets = []
         # get the target shape for each image
         for i in range(num_levels):
-            h, w = self.featmap_sizes[i]
-            hm = np.zeros((self.cls_out_channels, h, w), dtype=np.float32)
+            w, h = self.featmap_sizes[i]
+            hm = np.zeros((self.cls_out_channels, w, h), dtype=np.float32)
             heatmaps_targets.append(hm)
-            wh = np.zeros((h, w, 2), dtype=np.float32)
+            wh = np.zeros((w, h, 2), dtype=np.float32)
             wh_targets.append(wh)
-            offset = np.zeros((h, w, 2), dtype=np.float32)
+            offset = np.zeros((w, h, 2), dtype=np.float32)
             offset_targets.append(offset)
+            rot = np.zeros((w, h, 1), dtype=np.float32)
+            rot_targets.append(rot)
 
-        import pdb; pdb.set_trace()
         for k in range(num_objs):
             bbox = gt_bboxes[k]
             cls_id = gt_labels[k]
             
-            # if img_meta['flip']:
-            #     bbox[[0, 2]] = img_meta['width'] - bbox[[2, 0]] - 1
-                
-            # condition: in the regress_ranges
-            origin_h, origin_w = bbox[3] - bbox[1], bbox[2] - bbox[0]
-            #max_h_w = max(h, w) / 2
-            max_h_w = max(origin_h, origin_w)
-            #max_h_w = max(origin_h, origin_w) * 2 # 最长边为32在P2
+            origin_w, origin_h = bbox[2], bbox[3]
             # 根据max_h_w在哪一层将output设置为当前层的
             index_levels = []
-            #index_level = 0
             for i in range(num_levels):
                 min_regress_distance, max_regress_distance = self.regress_ranges[i]
-                if not self.use_cross and (max_h_w > min_regress_distance) and (max_h_w <= max_regress_distance):
+                if not self.use_cross and (origin_w > min_regress_distance) and (origin_w <= max_regress_distance):
                     index_levels.append(i)
                     break
                 
                 if self.use_cross:
                     min_regress_distance = min_regress_distance * 0.8
                     max_regress_distance = max_regress_distance * 1.3
-                    if (max_h_w > min_regress_distance) and (max_h_w <= max_regress_distance):
+                    if (origin_w > min_regress_distance) and (origin_w <= max_regress_distance):
                         index_levels.append(i)
                     
             for index_level in index_levels:
-                output_h, output_w = self.featmap_sizes[index_level]
-                #print(output_h, output_w)
+                output_w, output_h = self.featmap_sizes[index_level]
                 hm = heatmaps_targets[index_level]
                 wh = wh_targets[index_level]
                 offset = offset_targets[index_level]
-            
-                # c, s is passed by meta
-                import pdb; pdb.set_trace()
-                trans_output = get_affine_transform(img_meta['c'], img_meta['s'], 0, [output_w, output_h])
+                rot = rot_targets[index_level]
+
+                center = np.array([img_w / 2, img_h / 2], dtype=np.float32)
+                scale = max(img_w, img_h) * 1.0
+              
+                trans_output = get_affine_transform(center, scale, 0, [output_w, output_h])
                 bbox[:2] = affine_transform(bbox[:2], trans_output)
-                bbox[2:] = affine_transform(bbox[2:], trans_output)
-                bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, output_w - 1) #x1, x2
-                bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, output_h - 1)
-                h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
-                #print(h, w)
+                bbox[2:4] = affine_transform(bbox[2:4], trans_output)
+                w, h = bbox[2], bbox[3]
                 # 转换到当层
                 if h > 0 and w > 0:
-                    radius = gaussian_radius((math.ceil(h), math.ceil(w)))
+                    radius = gaussian_radius((math.ceil(w), math.ceil(h)), self.gaussian_iou)
                     radius = max(0, int(radius))
-                    ct = np.array(
-                      [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
-                    #print(ct)
+                    ct = np.array([bbox[0] , bbox[1]], dtype=np.float32)
                     ct_int = ct.astype(np.int32)
 
                     draw_umich_gaussian(hm[cls_id], ct_int, radius)
@@ -453,16 +446,16 @@ class CenterHead(nn.Module):
                     # ct_int即表明在featmap的位置 ct_int[1] * output_w + ct_int[0] 
                     # 如果当前位置有物体的中心，现在是直接覆盖
                     # 这里设置监督信号，第1位表示w，第2位表示h
-
-                    wh[ct_int[1], ct_int[0], 0] = w 
-                    wh[ct_int[1], ct_int[0], 1] = h 
-                    offset[ct_int[1], ct_int[0], 0] = offset_count[0]
-                    offset[ct_int[1], ct_int[0], 0] = offset_count[1]
-            
+                    wh[ct_int[0], ct_int[1], 0] = w 
+                    wh[ct_int[0], ct_int[1], 1] = h 
+                    offset[ct_int[0], ct_int[1], 0] = offset_count[0]
+                    offset[ct_int[0], ct_int[1], 1] = offset_count[1]
+                    rot[ct_int[0], ct_int[1]] = bbox[4]
             
                 heatmaps_targets[index_level] = hm
                 wh_targets[index_level] = wh
                 offset_targets[index_level] = offset
+                rot_targets[index_level] = rot
 
         flatten_heatmaps_targets = [
             hm.transpose(1, 2, 0).reshape(-1, self.cls_out_channels)
@@ -484,6 +477,11 @@ class CenterHead(nn.Module):
         ]
         offset_targets = np.concatenate(flatten_offset_targets)
 
+        flatten_rot_targets = [
+            rot.reshape(-1, 1) for rot in rot_targets
+        ]
+        rot_targets = np.concatenate(flatten_rot_targets)
+
         # transform the heatmaps_targets, wh_targets, offset_targets into tensor
         heatmaps_targets = torch.from_numpy(np.stack(heatmaps_targets))
         heatmaps_targets = torch.tensor(heatmaps_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
@@ -491,8 +489,10 @@ class CenterHead(nn.Module):
         wh_targets = torch.tensor(wh_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         offset_targets = torch.from_numpy(np.stack(offset_targets))
         offset_targets = torch.tensor(offset_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
+        rot_targets = torch.from_numpy(np.stack(rot_targets))
+        rot_targets = torch.tensor(rot_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         
-        return heatmaps_targets, wh_targets, offset_targets
+        return heatmaps_targets, wh_targets, offset_targets, rot_targets
 
     # test use
     @force_fp32(apply_to=('cls_scores', 'wh_preds', 'offset_preds'))
@@ -569,29 +569,15 @@ class CenterHead(nn.Module):
 
         return results
 
-#num_classes = 80
 
-def gaussian_small_radius(det_size, min_overlap=0.7):
-    height, width = det_size
-    
-    a1  = 1
-    b1  = (height + width)
-    c1  = width * height * (1 - min_overlap) / (1 + min_overlap)
-    sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
-    r1  = (b1 - sq1) / (2 * a1)
-    
-    a2  = 4
-    b2  = 2 * (height + width)
-    c2  = (1 - min_overlap) * width * height
-    sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
-    r2  = (b2 - sq2) / (2 * a2)
-    
-    a3  = 4 * min_overlap
-    b3  = -2 * min_overlap * (height + width)
-    c3  = (min_overlap - 1) * width * height
-    sq3 = np.sqrt(b3 ** 2 - 4 * a3 * c3)
-    r3  = (b3 + sq3) / (2 * a3)
-    return min(r1, r2, r3)
+def gaussian2D(shape, sigma=1):
+    m, n = [(ss - 1.) / 2. for ss in shape]
+    y, x = np.ogrid[-m:m + 1, -n:n + 1]
+
+    h = np.exp(-(x * x + y * y) / (2 * sigma * sigma))
+    h[h < np.finfo(h.dtype).eps * h.max()] = 0
+    # 限制最小的值
+    return h
 
 
 def draw_umich_gaussian(heatmap, center, radius, k=1):
@@ -611,10 +597,12 @@ def draw_umich_gaussian(heatmap, center, radius, k=1):
         np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
     return heatmap
 
+
 def affine_transform(pt, t):
     new_pt = np.array([pt[0], pt[1], 1.], dtype=np.float32).T
     new_pt = np.dot(t, new_pt)
     return new_pt[:2]
+
 
 def get_affine_transform(center,
                          scale,
