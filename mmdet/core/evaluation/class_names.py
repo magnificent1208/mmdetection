@@ -99,6 +99,13 @@ def dota_classes():
         'swimming-pool', 'helicopter','container-crane'
     ]
 
+
+def tunnel_obj_classes():
+    return [
+        'xd', 'dlbg', 'box'
+    ]
+
+
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
     'imagenet_det': ['det', 'imagenet_det', 'ilsvrc_det'],
@@ -106,7 +113,8 @@ dataset_aliases = {
     'coco': ['coco', 'mscoco', 'ms_coco'],
     'wider_face': ['WIDERFaceDataset', 'wider_face', 'WDIERFace'],
     'cityscapes': ['cityscapes'],
-    'dota': ['dota']
+    'dota': ['dota'],
+    'tunnel_obj': ['tunnel_obj']
 }
 
 

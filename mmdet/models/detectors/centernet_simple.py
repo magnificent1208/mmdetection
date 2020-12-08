@@ -66,6 +66,8 @@ class CenterNet_Simple(SingleStageDetector):
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
         bbox_list = self.bbox_head.get_bboxes(*outs, img_metas, rescale=rescale)
+        
+        return bbox_list
 
     def forward_dummy(self, img):
         x = self.backbone(img)

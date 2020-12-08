@@ -47,9 +47,10 @@ model = dict(
         strides=[4, 8, 16, 32, 64],
         regress_ranges=((-1, 32),(32, 64), (64, 128), (128, 256), (256, 1e8)),
         loss_hm=dict(type='GaussianFocalLoss'),
-        loss_wh = dict(type="SmoothL1Loss",loss_weight=0.1),
-        loss_offset = dict(type="SmoothL1Loss",loss_weight=1.0),
-        loss_rot = dict(type='SmoothL1Loss',loss_weight=0.5))
+        loss_wh=dict(type="SmoothL1Loss",loss_weight=0.1),
+        loss_offset=dict(type="SmoothL1Loss",loss_weight=1.0),
+        loss_rot=dict(type='SmoothL1Loss',loss_weight=0.5),
+        K=100)
 )
 # training and testing settings
 train_cfg = dict(
@@ -96,7 +97,7 @@ test_pipeline = [
         img_scale=(1333, 800),
         flip=False,
         transforms=[
-            dict(type='Resize', keep_ratio=True),
+            dict(type='Resize', keep_ratio=True, is_rot=True),
             # dict(type='RandomFlip'),
             dict(type='Normalize', **img_norm_cfg),
             dict(type='Pad', size_divisor=32),
@@ -123,7 +124,7 @@ data = dict(
         img_prefix=data_root + 'train/',
         pipeline=test_pipeline))
 evaluation = dict(interval=100, metric='bbox')
-optimizer = dict(type='SGD', lr=0.001, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=5e-4, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
 lr_config = dict(
@@ -145,8 +146,8 @@ log_config = dict(
 # yapf:enable
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/center_simple'
-load_from = None
+work_dir = './work_dirs/center_simple_stage2'
+load_from = './work_dirs/center_simple/latest.pth'
 resume_from = None
 workflow = [('train', 1)]
 find_unused_parameters=True
