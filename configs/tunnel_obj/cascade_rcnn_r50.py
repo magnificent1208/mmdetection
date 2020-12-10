@@ -207,7 +207,7 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=12,
+    samples_per_gpu=16,
     workers_per_gpu=4,
     train=dict(
         type=dataset_type,
@@ -235,8 +235,8 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=100,
     warmup_ratio=1.0 / 3,
-    step=[16, 24])
-checkpoint_config = dict(interval=5)
+    step=[40, 50])
+checkpoint_config = dict(interval=10)
 # yapf:disable
 log_config = dict(
     interval=1,
@@ -246,10 +246,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 40
+total_epochs = 60
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/tunnel_obj/cascade_rcnn'
+work_dir = './work_dirs/tunnel_obj/cascade_rcnn_2gpu'
 load_from = None
 resume_from = None
 workflow = [('train', 1), ('val', 10)]
