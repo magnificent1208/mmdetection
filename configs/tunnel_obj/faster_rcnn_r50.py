@@ -106,9 +106,9 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        score_thr=0.05, nms=dict(type='nms', iou_thr=0.5), max_per_img=100)
+        score_thr=0.05, nms=dict(type='soft_nms', iou_threshold=0.3), max_per_img=100)
     # soft-nms is also supported for rcnn testing
-    # e.g., nms=dict(type='soft_nms', iou_thr=0.5, min_score=0.05)
+    # e.g., nms=dict(type='soft_nms', iou_threshold=0.5, min_score=0.05)
 )
 # dataset settings
 dataset_type = 'TunnelObjDataset'
@@ -119,9 +119,9 @@ train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
-    dict(type='ColorTransform', prob=0.5, level=5),
+    # dict(type='ColorTransform', prob=0.5, level=5),
     dict(type='RandomFlip', flip_ratio=0.5),
-    dict(type='EqualizeTransform', prob=0.5),
+    # dict(type='EqualizeTransform', prob=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
@@ -144,7 +144,7 @@ test_pipeline = [
 ]
 data = dict(
     samples_per_gpu=16,
-    workers_per_gpu=2,
+    workers_per_gpu=4,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'ImageSets/Main/train.txt',
@@ -162,7 +162,7 @@ data = dict(
         pipeline=test_pipeline))
 evaluation = dict(interval=10, metric='mAP')
 # optimizer
-optimizer = dict(type='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=5e-4, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -184,7 +184,7 @@ log_config = dict(
 total_epochs = 60
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/tunnel_obj/faster_rcnn_r50_argument'
-load_from = None
+work_dir = './work_dirs/tunnel_obj/faster_rcnn_r50_stage2'
+load_from = './work_dirs/tunnel_obj/faster_rcnn_r50_pretrain/latest.pth'
 resume_from = None
 workflow = [('train', 1)]

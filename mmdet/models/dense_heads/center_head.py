@@ -171,7 +171,6 @@ class CenterHead(nn.Module):
         assert len(cls_scores) == len(wh_preds) == len(offset_preds) == len(rot_preds)
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         self.featmap_sizes = featmap_sizes
-        import pdb; pdb.set_trace()
         all_level_points = self.get_points(featmap_sizes, offset_preds[0].dtype,
                                             offset_preds[0].device)
 
@@ -209,18 +208,10 @@ class CenterHead(nn.Module):
         flatten_wh_targets = torch.cat(wh_targets) # torch.Size([all_level_points, 2])
         flatten_offset_targets = torch.cat(offset_targets)
         flatten_rot_targets = torch.cat(rot_targets)
-
-        # repeat points to align with bbox_preds
-        # flatten_points = torch.cat(
-        #     [points.repeat(num_imgs, 1) for points in all_level_points])
-
-        # pos_inds = flatten_labels.nonzero().reshape(-1)
-        #print(flatten_wh_targets.shape)
-        #print(flatten_wh_targets.nonzero())
+        
         center_inds = flatten_wh_targets[...,0].nonzero().reshape(-1) 
         #print(center_inds)
         num_center = len(center_inds)
-        #print(num_center)
 
         # what about use the centerness * labels to indict an object
         # loss_cls = self.loss_cls(
@@ -239,13 +230,7 @@ class CenterHead(nn.Module):
         pos_rot_targets = flatten_rot_targets[center_inds]
         
         if num_center > 0:
-            # TODO: use the iou loss
-            # center_points = flatten_points[center_inds]
-            # center_decoded_bbox_preds = wh_offset2bbox(center_points, pos_wh_preds, pos_offset_preds)
-            # center_decoded_bbox_targets = wh_offset2bbox(center_points, pos_wh_targets, pos_offset_targets)
             loss_wh = self.loss_wh(pos_wh_preds, pos_wh_targets, avg_factor=num_center + num_imgs)
-            #loss_wh = F.l1_loss(pos_wh_preds, pos_wh_targets, reduction='sum') / (num_center + num_imgs)
-            #loss_wh = 0.1 * loss_wh
             loss_offset = self.loss_offset(pos_offset_preds, pos_offset_targets, avg_factor=num_center + num_imgs)
             loss_rot = self.loss_rot(pos_rot_preds, pos_rot_targets, avg_factor=num_center + num_imgs)
         else:
@@ -365,8 +350,6 @@ class CenterHead(nn.Module):
                     [rot_targets[i] for rot_targets in rot_targets_list]))        
         return concat_lvl_heatmaps, concat_lvl_wh_targets, concat_lvl_offset_targets, concat_lvl_rot_targets
 
-
-    # TODO: 20201116 update for rot 
     def center_target_single(self, gt_bboxes, gt_labels, img_meta):
         """
         single image
@@ -487,11 +470,11 @@ class CenterHead(nn.Module):
         heatmaps_targets = torch.as_tensor(heatmaps_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         # heatmaps_targets = heatmaps_targets.clone().detach().dtype(self.tensor_dtype).device(self.tensor_device)
         wh_targets = torch.from_numpy(np.stack(wh_targets))
-        wh_targets = torch.tensor(wh_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
+        wh_targets = torch.as_tensor(wh_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         offset_targets = torch.from_numpy(np.stack(offset_targets))
-        offset_targets = torch.tensor(offset_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
+        offset_targets = torch.as_tensor(offset_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         rot_targets = torch.from_numpy(np.stack(rot_targets))
-        rot_targets = torch.tensor(rot_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
+        rot_targets = torch.as_tensor(rot_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         
         return heatmaps_targets, wh_targets, offset_targets, rot_targets
 
@@ -555,17 +538,17 @@ class CenterHead(nn.Module):
                 cls_scores, wh_preds, offset_preds, rot_preds, featmap_sizes): # 取出每一层的点
             assert cls_score.size()[-2:] == wh_pred.size()[-2:] == offset_pred.size()[-2:] == rot_pred.size()[-2:] == featmap_size
             
-            output_h, output_w = featmap_size
+            output_w, output_h = featmap_size
             #实际上得到了每一层的hm, wh, offset
             hm = torch.clamp(cls_score.sigmoid_(), min=1e-4, max=1-1e-4).unsqueeze(0) # 增加一个纬度
             wh = wh_pred.unsqueeze(0) # 这里需要乘以featuremap的尺度
             reg = offset_pred.unsqueeze(0)
             rot = rot_pred.unsqueeze(0)
-            dets = ctdet_decode(hm, wh, reg=reg, rot=rot, K=self.K)
+            dets = ctdet_decode_rot(hm, reg, wh, rot, K=self.K)
             dets = post_process(dets, c, s, output_h, output_w, scale=scale_factor, num_classes=self.num_classes)
             detections.append(dets)
         
-        results = merge_outputs(detections, self.num_classes) # 单张图的结果
+        results = merge_outputs(detections, self.num_classes, self.K) # 单张图的结果
         return results
 
 
@@ -581,15 +564,14 @@ def gaussian2D(shape, sigma=1):
 
 def draw_umich_gaussian(heatmap, center, radius, k=1):
     diameter = 2 * radius + 1
-    gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
+    gaussian = gaussian2D((diameter, diameter), sigma=diameter / 2)
     
     x, y = int(center[0]), int(center[1])
     
     height, width = heatmap.shape[0:2]
-        
+    
     left, right = min(x, radius), min(width - x, radius + 1)
     top, bottom = min(y, radius), min(height - y, radius + 1)
-    
     masked_heatmap  = heatmap[y - top:y + bottom, x - left:x + right]
     masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
     if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0: # TODO debug
@@ -638,6 +620,7 @@ def get_affine_transform(center,
 
     return trans
 
+
 def get_dir(src_point, rot_rad):
     sn, cs = np.sin(rot_rad), np.cos(rot_rad)
 
@@ -647,53 +630,47 @@ def get_dir(src_point, rot_rad):
 
     return src_result
 
+
 def get_3rd_point(a, b):
     direct = a - b
     return b + np.array([-direct[1], direct[0]], dtype=np.float32)
 
-def ctdet_decode(heat, wh, reg=None, rot=None, cat_spec_wh=False, K=40):
-    batch, cat, height, width = heat.size() # 1， 80, 128, 128
-    heat = torch.sigmoid(heat)
-    
-    #print("batch, cat, height, width\n", batch, cat, height, width)
-   
-    if height * width <= K:
-        K = height * width 
 
-    heat = _nms(heat)
-    scores, inds, clses, ys, xs = _topk(heat, K=K)
-    
-    if reg is not None:
-        reg = _tranpose_and_gather_feat(reg, inds)
-        reg = reg.view(batch, K, 2)
-        xs = xs.view(batch, K, 1) + reg[:, :, 0:1]
-        ys = ys.view(batch, K, 1) + reg[:, :, 1:2]
-    else:
-        xs = xs.view(batch, K, 1) + 0.5
-        ys = ys.view(batch, K, 1) + 0.5
-    wh = _tranpose_and_gather_feat(wh, inds) # inds 对应 h, w的尺度
-    if cat_spec_wh:
-        wh = wh.view(batch, K, cat, 2)
-        clses_ind = clses.view(batch, K, 1, 1).expand(batch, K, 1, 2).long()
-        wh = wh.gather(2, clses_ind).view(batch, K, 2)
-    else:
-        wh = wh.view(batch, K, 2)
+def ctdet_decode_rot(hmap, regs, w_h_, rot, K=100):
+    batch, cat, height, width = hmap.shape
+    hmap = torch.sigmoid(hmap)
+    # if flip test
+    if batch > 1:
+        hmap = (hmap[0:1] + flip_tensor(hmap[1:2])) / 2
+        w_h_ = (w_h_[0:1] + flip_tensor(w_h_[1:2])) / 2
+        regs = regs[0:1]
+        # TODO: 检查此处是否需要
+        rot = rot[0:1]
+
+    batch = 1
+
+    hmap = _nms(hmap)  # perform nms on heatmaps
+
+    scores, inds, clses, ys, xs = _topk(hmap, K=K)
+
+    regs = _tranpose_and_gather_feature(regs, inds)
+    regs = regs.view(batch, K, 2)
+    xs = xs.view(batch, K, 1) + regs[:, :, 0:1]
+    ys = ys.view(batch, K, 1) + regs[:, :, 1:2]
+    rot = _tranpose_and_gather_feature(rot, inds)
+    rot = rot.view(batch, K, 1)
         
-    clses  = clses.view(batch, K, 1).float()
-    scores = scores.view(batch, K, 1) # 0, 1, 2
+    w_h_ = _tranpose_and_gather_feature(w_h_, inds)
+    w_h_ = w_h_.view(batch, K, 2)
 
-    if rot is not None:
-        rot = _tranpose_and_gather_feat(rot, inds)
-        rot = rot.view(batch, K, 1)
-        bboxes = _get_rot_box(xs, ys, wh, rot)
-    else:
-        bboxes = torch.cat([xs - wh[..., 0:1] / 2, 
-                            ys - wh[..., 1:2] / 2,
-                            xs + wh[..., 0:1] / 2, 
-                            ys + wh[..., 1:2] / 2], dim=2)
-    
-    detections = torch.cat([bboxes, scores, clses], dim=2)
+    clses = clses.view(batch, K, 1).float()
+    scores = scores.view(batch, K, 1)
+    # bboxes = _get_rot_box(xs, ys, w_h_, rot)
+    #TODO: May not necessary 
+    bboxes = torch.cat([xs, ys, w_h_, rot], dim=2)
+    detections = torch.cat([bboxes, rot, scores, clses], dim=2)
     return detections
+
 
 def _get_rot_box(xs, ys, w_h_, rot):
     direction = []
@@ -714,6 +691,7 @@ def _get_rot_box(xs, ys, w_h_, rot):
     
     return torch.stack([x0, y0, x1, y1, x2, y2, x3, y3], dim=2)
 
+
 def _nms(heat, kernel=3):
     pad = (kernel - 1) // 2
     hmax = nn.functional.max_pool2d(
@@ -721,42 +699,43 @@ def _nms(heat, kernel=3):
     keep = (hmax == heat).float()
     return heat * keep
 
-def _gather_feat(feat, ind, mask=None):
-    dim  = feat.size(2)
-    ind  = ind.unsqueeze(2).expand(ind.size(0), ind.size(1), dim)
-    feat = feat.gather(1, ind)
+
+def _gather_feature(feat, ind, mask=None):
+    dim = feat.size(2)
+    ind = ind.unsqueeze(2).expand(ind.size(0), ind.size(1), dim)
+    feat = feat.gather(1, ind) # 按照dim=1获取ind
     if mask is not None:
         mask = mask.unsqueeze(2).expand_as(feat)
         feat = feat[mask]
         feat = feat.view(-1, dim)
     return feat
 
-def _tranpose_and_gather_feat(feat, ind):
-    feat = feat.permute(0, 2, 3, 1).contiguous()
-    feat = feat.view(feat.size(0), -1, feat.size(3))
-    feat = _gather_feat(feat, ind)
+
+def _tranpose_and_gather_feature(feat, ind):
+    # ind代表的是ground truth中设置的存在目标点的下角标
+    feat = feat.permute(0, 2, 3, 1).contiguous()# from [bs c h w] to [bs, h, w, c] 
+    feat = feat.view(feat.size(0), -1, feat.size(3)) # to [bs, wxh, c]
+    feat = _gather_feature(feat, ind)
     return feat
 
+
 def _topk(scores, K=40):
-    batch, cat, height, width = scores.size() # 1， 80，height, width
-    #print("batch, cat, height, width\n", batch, cat, height, width)
-    #print("k:", K)
+    batch, cat, height, width = scores.size()
 
     topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
 
     topk_inds = topk_inds % (height * width)
-    topk_ys   = (topk_inds / width).int().float() # y-> h, x-> w
-    topk_xs   = (topk_inds % width).int().float()
+    topk_ys = (topk_inds / width).int().float()
+    topk_xs = (topk_inds % width).int().float()
 
     topk_score, topk_ind = torch.topk(topk_scores.view(batch, -1), K)
-
     topk_clses = (topk_ind / K).int()
-    topk_inds = _gather_feat(
-        topk_inds.view(batch, -1, 1), topk_ind).view(batch, K)
-    topk_ys = _gather_feat(topk_ys.view(batch, -1, 1), topk_ind).view(batch, K)
-    topk_xs = _gather_feat(topk_xs.view(batch, -1, 1), topk_ind).view(batch, K)
+    topk_inds = _gather_feature(topk_inds.view(batch, -1, 1), topk_ind).view(batch, K)
+    topk_ys = _gather_feature(topk_ys.view(batch, -1, 1), topk_ind).view(batch, K)
+    topk_xs = _gather_feature(topk_xs.view(batch, -1, 1), topk_ind).view(batch, K)
 
     return topk_score, topk_inds, topk_clses, topk_ys, topk_xs
+
 
 def post_process(dets, c, s, out_height, out_width, scale, num_classes):
     dets = dets.detach().cpu().numpy()
@@ -765,11 +744,13 @@ def post_process(dets, c, s, out_height, out_width, scale, num_classes):
     dets = ctdet_post_process(
         dets.copy(), [c], [s],
         out_height, out_width, num_classes)
-    
     for j in range(1, num_classes + 1):
-        dets[0][j] = np.array(dets[0][j], dtype=np.float32).reshape(-1, 9)
-        dets[0][j][:, :8] /= scale[0]
+        dets[0][j][:, 0] /= scale[0]
+        dets[0][j][:, 1] /= scale[1]
+        dets[0][j][:, 2] /= scale[0]
+        dets[0][j][:, 3] /= scale[1]
     return dets[0]
+
 
 def ctdet_post_process(dets, c, s, h, w, num_classes):
     ret = []
@@ -780,42 +761,42 @@ def ctdet_post_process(dets, c, s, h, w, num_classes):
             dets[i, :, 0:2], c[i], s[i], (w, h))
         dets[i, :, 2:4] = transform_preds(
             dets[i, :, 2:4], c[i], s[i], (w, h))
-        dets[i, :, 4:6] = transform_preds(
-            dets[i, :, 4:6], c[i], s[i], (w, h))
-        dets[i, :, 6:8] = transform_preds(
-            dets[i, :, 6:8], c[i], s[i], (w, h))
+        # dets[i, :, 4:6] = transform_preds(
+        #     dets[i, :, 4:6], c[i], s[i], (w, h))
+        # dets[i, :, 6:8] = transform_preds(
+        #     dets[i, :, 6:8], c[i], s[i], (w, h))
 
         classes = dets[i, :, -1]
 
         for j in range(num_classes):
             inds = (classes == j)
-            top_preds[j + 1] = np.concatenate([
-                dets[i, inds, :8].astype(np.float32),
-                dets[i, inds, 8:9].astype(np.float32)], axis=1).tolist() # 这里将框按照类别进行分类
+            top_preds[j + 1] = dets[i, inds, :7].astype(np.float32)
         ret.append(top_preds)
 
     return ret
-  
-def merge_outputs(detections, num_classes):
+
+
+def merge_outputs(detections, num_classes, num_keep):
 
     results = {}
-    max_per_image = 100
+    max_per_image = num_keep
     for j in range(1, num_classes + 1):
         results[j] = np.concatenate(
             [detection[j] for detection in detections], axis=0).astype(np.float32)
 
-        results[j] = soft_nms(results[j], Nt=0.5, method=2, threshold=0.01)
+        # results[j] = soft_nms(results[j], Nt=0.5, method=2, threshold=0.01)
 
-    scores = np.hstack([results[j][:, 4] for j in range(1, num_classes + 1)])
+    scores = np.hstack([results[j][:, 5] for j in range(1, num_classes + 1)])
 
     if len(scores) > max_per_image:
         kth = len(scores) - max_per_image
         thresh = np.partition(scores, kth)[kth]
         for j in range(1, num_classes + 1):
-            keep_inds = (results[j][:, 4] >= thresh)
+            keep_inds = (results[j][:, 5] >= thresh)
             results[j] = results[j][keep_inds]
 
     return results2coco_boxes(results, num_classes)
+
 
 def results2coco_boxes(results, num_classes): 
     """Convert detection results to a list of numpy arrays.
@@ -829,7 +810,7 @@ def results2coco_boxes(results, num_classes):
     bboxes = [0 for i in range(num_classes)]
     for j in range(1, num_classes + 1):
         if len(results[j]) == 0:
-            bboxes[j - 1] = np.zeros((0, 5), dtype=np.float32)
+            bboxes[j - 1] = np.zeros((0, 7), dtype=np.float32)
             continue
         bboxes[j - 1] = results[j]
     #print(bboxes) # xyxy
@@ -928,7 +909,8 @@ def soft_nms(boxes, sigma=0.5, Nt=0.3, threshold=0.01, method=0):
     keep = [i for i in range(N)]
     boxes = boxes[keep]
     return boxes
-  
+
+
 def transform_preds(coords, center, scale, output_size):
     target_coords = np.zeros(coords.shape)
     trans = get_affine_transform(center, scale, 0, output_size, inv=1) 

@@ -235,14 +235,15 @@ class Resize(object):
     def _resize_bboxes(self, results):
         """Resize bounding boxes with ``results['scale_factor']``."""
         for key in results.get('bbox_fields', []):
-            bboxes = results[key] * results['scale_factor']
             if self.is_rot:
                 results[key][:, :4] *= results['scale_factor']
-            elif self.bbox_clip_border:
-                img_shape = results['img_shape']
-                bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, img_shape[1])
-                bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0])
-            results[key] = bboxes
+            else:
+                bboxes = results[key] * results['scale_factor']
+                if self.bbox_clip_border:
+                    img_shape = results['img_shape']
+                    bboxes[:, 0::2] = np.clip(bboxes[:, 0::2], 0, img_shape[1])
+                    bboxes[:, 1::2] = np.clip(bboxes[:, 1::2], 0, img_shape[0])
+                results[key] = bboxes
 
     def _resize_masks(self, results):
         """Resize masks with ``results['scale']``"""

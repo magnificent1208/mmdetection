@@ -4,7 +4,7 @@ import numpy as np
 from mmcv.utils import print_log
 from terminaltables import AsciiTable
 
-from .bbox_overlaps import bbox_overlaps
+from .bbox_overlaps import bbox_overlaps, iou_rotate_calculate
 
 
 def _recalls(all_ious, proposal_nums, thrs):
@@ -65,7 +65,8 @@ def eval_recalls(gts,
                  proposals,
                  proposal_nums=None,
                  iou_thrs=0.5,
-                 logger=None):
+                 logger=None,
+                 rot=False):
     """Calculate recalls.
 
     Args:
@@ -96,6 +97,8 @@ def eval_recalls(gts,
         prop_num = min(img_proposal.shape[0], proposal_nums[-1])
         if gts[i] is None or gts[i].shape[0] == 0:
             ious = np.zeros((0, img_proposal.shape[0]), dtype=np.float32)
+        elif rot:
+            ious = iou_rotate_calculate(gts[i], img_proposal[:prop_num, :5])
         else:
             ious = bbox_overlaps(gts[i], img_proposal[:prop_num, :4])
         all_ious.append(ious)

@@ -1,12 +1,12 @@
 import os
 import os.path as osp
+
 import cv2
 import json
 import math
 import pickle
 import numpy as np
 import xml.etree.ElementTree as ET
-
 import torch
 import torch.utils.data as data
 import pycocotools.coco as coco
@@ -14,23 +14,11 @@ import cv2
 import numpy as np
 import mmcv
 
-import sys
+from mmdet.core import eval_map, eval_recalls
 from .builder import DATASETS
 from .xml_style import XMLDataset
-
 from utils.image import get_border, get_affine_transform, affine_transform, color_aug
 from utils.image import draw_umich_gaussian, gaussian_radius
-
-
-# 均值和方差
-DOTA_MEAN = [0.36488013, 0.36802809, 0.35458627]
-DOTA_STD = [0.04308565, 0.04508483, 0.0519263 ]
-
-# eigen: 特征
-VOC_EIGEN_VALUES = [0.2141788, 0.01817699, 0.00341571]
-VOC_EIGEN_VECTORS = [[-0.58752847, -0.69563484, 0.41340352],
-                     [-0.5832747, 0.00994535, -0.81221408],
-                     [-0.56089297, 0.71832671, 0.41158938]]
 
 
 @DATASETS.register_module()
@@ -165,13 +153,13 @@ class DotaDataset(XMLDataset):
             bboxes.append(bbox)
             labels.append(label)
         if not bboxes:
-            bboxes = np.zeros((0, 4))
+            bboxes = np.zeros((0, 5))
             labels = np.zeros((0, ))
         else:
             bboxes = np.array(bboxes, ndmin=2) - 1
             labels = np.array(labels)
         if not bboxes_ignore:
-            bboxes_ignore = np.zeros((0, 4))
+            bboxes_ignore = np.zeros((0, 5))
             labels_ignore = np.zeros((0, ))
         else:
             bboxes_ignore = np.array(bboxes_ignore, ndmin=2) - 1
@@ -245,78 +233,6 @@ class DotaDataset(XMLDataset):
                 valid_inds.append(i)
         return valid_inds
 
-    # def __getitem__(self, index):
-    #     img_info = self.data_infos[index]
-    #     ann_info = self.get_ann_info(index)
-    #     pipline = self.pipeline
-    #     labels, bboxes = ann_info['labels'], ann_info['bboxes']
-
-    #     img = cv2.imread(img_path)
-    #     height, width = img_info['height'], img_info['width']
-    #     # 获取中心坐标p
-    #     center = np.array([width / 2., height / 2.],
-    #                         dtype=np.float32)  # center of image
-    #     scale = max(height, width) * 1.0  # 仿射变换
-
-    #     # 仿射变换
-    #     trans_img = get_affine_transform(
-    #         center, scale, 0, [self.img_size['w'], self.img_size['h']])
-    #     img = cv2.warpAffine(
-    #         img, trans_img, (self.img_size['w'], self.img_size['h']))
-
-    #     # 归一化
-    #     img = (img.astype(np.float32) / 255.)
-    #     # img -= self.mean
-    #     # img /= self.std
-    #     img = img.transpose(2, 0, 1)  # from [H, W, C] to [C, H, W]
-
-    #     # 对Ground Truth heatmap进行仿射变换
-    #     trans_fmap = get_affine_transform(
-    #         center, scale, 0, [self.fmap_size['w'], self.fmap_size['h']]) # 这时候已经是下采样为原来的四分之一了
-
-    #     # 3个最重要的变量
-    #     hmap = np.zeros(
-    #         (self.num_classes, self.fmap_size['h'], self.fmap_size['w']), dtype=np.float32)  # heatmap
-    #     w_h_ = np.zeros((self.max_objs, 2), dtype=np.float32)  # width and height
-    #     regs = np.zeros((self.max_objs, 2), dtype=np.float32)  # regression
-    #     rot = np.zeros((self.max_objs, 1), dtype=np.float32)
-
-    #     # indexs
-    #     inds = np.zeros((self.max_objs,), dtype=np.int64)
-    #     # 具体选择哪些index
-    #     ind_masks = np.zeros((self.max_objs,), dtype=np.uint8)
-
-    #     if len(bboxes) > self.max_objs:
-    #         bboxes, labels = bboxes[:self.max_objs], labels[:self.max_objs]
-
-    #     for k, (bbox, label) in enumerate(zip(bboxes, labels)):
-    #         # 对检测框也进行仿射变换
-    #         bbox[:2] = affine_transform(bbox[:2], trans_fmap)
-    #         bbox[2:4] = affine_transform(bbox[2:4], trans_fmap)
-    #         w, h = bbox[2:4]
-
-    #         if bbox[2] > 0 and bbox[3] > 0:
-    #             obj_c = np.array(bbox[:2], dtype=np.float32) # 中心坐标-浮点型
-    #             obj_c_int = obj_c.astype(np.int32) # 整型的中心坐标
-    #             # 根据一元二次方程计算出最小的半径
-    #             radius = max(0, int(gaussian_radius((math.ceil(h), math.ceil(w)), self.gaussian_iou)))
-    #             # 得到高斯分布
-    #             draw_umich_gaussian(hmap[label], obj_c_int, radius)
-
-    #             w_h_[k] = 1. * w, 1. * h
-                
-    #             # 记录偏移量
-    #             regs[k] = obj_c - obj_c_int  # discretization error
-    #             # 当前是obj序列中的第k个 = fmap_w * cy + cx = fmap中的序列数
-    #             inds[k] = obj_c_int[1] * self.fmap_size['w'] + obj_c_int[0]
-    #             # 进行mask标记
-    #             ind_masks[k] = 1
-    #             rot[k] = bbox[4]
-
-    #     return {'image': img, 'hmap': hmap, 'w_h_': w_h_, 'regs': regs, 
-    #             'inds': inds, 'ind_masks': ind_masks, 'c': center, 'rot': rot,
-    #             's': scale, 'img_id': img_name}
-
     def evaluate(self,
                  results,
                  metric='mAP',
@@ -356,19 +272,20 @@ class DotaDataset(XMLDataset):
         eval_results = {}
         if metric == 'mAP':
             assert isinstance(iou_thr, float)
-            ds_name = self.CLASSES
             mean_ap, _ = eval_map(
                 results,
                 annotations,
                 scale_ranges=None,
                 iou_thr=iou_thr,
-                dataset=ds_name,
-                logger=logger)
+                dataset='dota',
+                logger=logger,
+                nproc=10)
             eval_results['mAP'] = mean_ap
         elif metric == 'recall':
             gt_bboxes = [ann['bboxes'] for ann in annotations]
             if isinstance(iou_thr, float):
                 iou_thr = [iou_thr]
+            #TODO: update recall for rot-dataset
             recalls = eval_recalls(
                 gt_bboxes, results, proposal_nums, iou_thr, logger=logger)
             for i, num in enumerate(proposal_nums):

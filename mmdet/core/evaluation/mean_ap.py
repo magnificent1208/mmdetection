@@ -5,7 +5,7 @@ import numpy as np
 from mmcv.utils import print_log
 from terminaltables import AsciiTable
 
-from .bbox_overlaps import bbox_overlaps
+from .bbox_overlaps import bbox_overlaps, iou_rotate_calculate
 from .class_names import get_classes
 
 
@@ -237,6 +237,93 @@ def tpfp_default(det_bboxes,
     return tp, fp
 
 
+def tpfp_rot(det_bboxes,
+             gt_bboxes,
+             gt_bboxes_ignore=None,
+             iou_thr=0.5,
+             area_ranges=None):
+    """Check if detected bboxes are true positive or false positive.
+
+    Args:
+        det_bbox (ndarray): Detected bboxes of this image, of shape (m, 5).
+        gt_bboxes (ndarray): GT bboxes of this image, of shape (n, 4).
+        gt_bboxes_ignore (ndarray): Ignored gt bboxes of this image,
+            of shape (k, 4). Default: None
+        iou_thr (float): IoU threshold to be considered as matched.
+            Default: 0.5.
+        area_ranges (list[tuple] | None): Range of bbox areas to be evaluated,
+            in the format [(min1, max1), (min2, max2), ...]. Default: None.
+
+    Returns:
+        tuple[np.ndarray]: (tp, fp) whose elements are 0 and 1. The shape of
+            each array is (num_scales, m).
+    """
+    # an indicator of ignored gts
+    gt_ignore_inds = np.concatenate(
+        (np.zeros(gt_bboxes.shape[0], dtype=np.bool),
+         np.ones(gt_bboxes_ignore.shape[0], dtype=np.bool)))
+    # stack gt_bboxes and gt_bboxes_ignore for convenience
+    gt_bboxes = np.vstack((gt_bboxes, gt_bboxes_ignore))
+
+    num_dets = det_bboxes.shape[0]
+    num_gts = gt_bboxes.shape[0]
+    if area_ranges is None:
+        area_ranges = [(None, None)]
+    num_scales = len(area_ranges)
+    # tp and fp are of shape (num_scales, num_gts), each row is tp or fp of
+    # a certain scale
+    tp = np.zeros((num_scales, num_dets), dtype=np.float32)
+    fp = np.zeros((num_scales, num_dets), dtype=np.float32)
+
+    # if there is no gt bboxes in this image, then all det bboxes
+    # within area range are false positives
+    if gt_bboxes.shape[0] == 0:
+        if area_ranges == [(None, None)]:
+            fp[...] = 1
+        else:
+            det_areas = (det_bboxes[:, 2] - det_bboxes[:, 0]) * (
+                det_bboxes[:, 3] - det_bboxes[:, 1])
+            for i, (min_area, max_area) in enumerate(area_ranges):
+                fp[i, (det_areas >= min_area) & (det_areas < max_area)] = 1
+        return tp, fp
+
+    # import pdb; pdb.set_trace()
+    ious = iou_rotate_calculate(det_bboxes, gt_bboxes)
+    # for each det, the max iou with all gts
+    ious_max = ious.max(axis=1)
+    # for each det, which gt overlaps most with it
+    ious_argmax = ious.argmax(axis=1)
+    # sort all dets in descending order by scores
+    sort_inds = np.argsort(-det_bboxes[:, -1])
+    for k, (min_area, max_area) in enumerate(area_ranges):
+        gt_covered = np.zeros(num_gts, dtype=bool)
+        # if no area range is specified, gt_area_ignore is all False
+        if min_area is None:
+            gt_area_ignore = np.zeros_like(gt_ignore_inds, dtype=bool)
+        else:
+            gt_areas = gt_bboxes[:, 2] * gt_bboxes[:, 3]
+            gt_area_ignore = (gt_areas < min_area) | (gt_areas >= max_area)
+        for i in sort_inds:
+            if ious_max[i] >= iou_thr:
+                matched_gt = ious_argmax[i]
+                if not (gt_ignore_inds[matched_gt]
+                        or gt_area_ignore[matched_gt]):
+                    if not gt_covered[matched_gt]:
+                        gt_covered[matched_gt] = True
+                        tp[k, i] = 1
+                    else:
+                        fp[k, i] = 1
+                # otherwise ignore this detected bbox, tp = 0, fp = 0
+            elif min_area is None:
+                fp[k, i] = 1
+            else:
+                bbox = det_bboxes[i, :5]
+                area = bbox[2] * bbox[3]
+                if area >= min_area and area < max_area:
+                    fp[k, i] = 1
+    return tp, fp
+
+
 def get_cls_results(det_results, annotations, class_id):
     """Get det results and gt information of a certain class.
 
@@ -248,6 +335,7 @@ def get_cls_results(det_results, annotations, class_id):
     Returns:
         tuple[list[np.ndarray]]: detected bboxes, gt bboxes, ignored gt bboxes
     """
+    # import pdb; pdb.set_trace()
     cls_dets = [img_res[class_id] for img_res in det_results]
     cls_gts = []
     cls_gts_ignore = []
@@ -259,7 +347,7 @@ def get_cls_results(det_results, annotations, class_id):
             ignore_inds = ann['labels_ignore'] == class_id
             cls_gts_ignore.append(ann['bboxes_ignore'][ignore_inds, :])
         else:
-            cls_gts_ignore.append(np.empty((0, 4), dtype=np.float32))
+            cls_gts_ignore.append(np.empty((0, 5), dtype=np.float32))
 
     return cls_dets, cls_gts, cls_gts_ignore
 
@@ -325,13 +413,15 @@ def eval_map(det_results,
         if tpfp_fn is None:
             if dataset in ['det', 'vid']:
                 tpfp_fn = tpfp_imagenet
+            elif dataset in ['dota']:
+                tpfp_fn = tpfp_rot
             else:
                 tpfp_fn = tpfp_default
         if not callable(tpfp_fn):
             raise ValueError(
                 f'tpfp_fn has to be a function or None, but got {tpfp_fn}')
-
         # compute tp and fp for each image with multiple processes
+        # FIXME: support multiprocessing
         tpfp = pool.starmap(
             tpfp_fn,
             zip(cls_dets, cls_gts, cls_gts_ignore,
@@ -351,6 +441,7 @@ def eval_map(det_results,
                     num_gts[k] += np.sum((gt_areas >= min_area)
                                          & (gt_areas < max_area))
         # sort all det bboxes by score, also sort tp and fp
+        # import pdb; pdb.set_trace()
         cls_dets = np.vstack(cls_dets)
         num_dets = cls_dets.shape[0]
         sort_inds = np.argsort(-cls_dets[:, -1])

@@ -105,6 +105,11 @@ def tunnel_obj_classes():
         'xd', 'dlbg', 'box'
     ]
 
+def tunnel_rot_classes():
+    return [
+        'dljt'
+    ]
+
 
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
@@ -114,7 +119,8 @@ dataset_aliases = {
     'wider_face': ['WIDERFaceDataset', 'wider_face', 'WDIERFace'],
     'cityscapes': ['cityscapes'],
     'dota': ['dota'],
-    'tunnel_obj': ['tunnel_obj']
+    'tunnel_obj': ['tunnel_obj'], 
+    'tunneo_rot': ['tunnel_rot']
 }
 
 

@@ -1,4 +1,5 @@
 import torch
+import cv2
 
 from mmdet.core import bbox2result, bbox_mapping_back
 from ..builder import DETECTORS
@@ -44,7 +45,6 @@ class CenterNet_Simple(SingleStageDetector):
         """
         # x = self.extract_feat(img)
         x = self.backbone(img)
-        # import pdb; pdb.set_trace()
         if self.neck:
             x = self.neck(x)
         losses = self.bbox_head.forward_train(x, img_metas, gt_bboxes,
@@ -141,3 +141,40 @@ class CenterNet_Simple(SingleStageDetector):
         bbox_results = bbox2result(bboxes, labels, self.bbox_head.num_classes)
 
         return bbox_results
+
+
+    def show_result(self,
+                    img,
+                    result,
+                    score_thr=0.3,
+                    bbox_color='green',
+                    text_color='green',
+                    thickness=1,
+                    font_scale=0.5,
+                    win_name='',
+                    show=False,
+                    wait_time=0,
+                    out_file=None):
+        img_cv = cv2.imread(img)
+        img_cv = img_cv.copy()
+        #TODO: exchange [cx,cy,w,h,r] to [x0,y0,x1,y1,x2,y2,x3,y3]
+        colors = ((0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255), (255, 255, 0), (64, 0, 0), (0, 64, 0), (0, 0, 64),
+                  (64, 64, 0), (0, 64, 64), (64, 0 , 64), (128, 0, 0), (0, 128, 0), (0, 0, 128), (128, 128, 0), (128, 0, 128), (0, 128, 128),
+                  (192, 0, 0), (0, 192, 0), (192, 0, 0), (192, 192, 0))
+
+        for i in range(self.bbox_head.num_classes):
+            for j in result[i]:
+                if j[9] > score_thr:
+                    for k in range(4):
+                        cv2.line(img_cv, (j[2*k], j[2*k + 1]), (j[(2*k + 2) % 8], j[(2*k + 3) % 8]), colors[i], 2)
+                    print('draw box')
+
+        cv2.imwrite(out_file, img_cv)
+
+        #     # Draw heatmap
+        #     # heatmap = output[0][0][i] * 10
+        #     # heatmap = heatmap.cpu().numpy().astype(np.uint8)
+        #     # heatmap = cv.applyColorMap(heatmap, cv.COLORMAP_HOT)
+        #     # cv.imwrite('./show_result/' + cfg.show_dir + img_id + '/' + 'heatmap_{}.jpg'.format(i), heatmap)
+        
+        # # os.system('mv heatmap/* show_result/' + cfg.show_dir + img_id + '/')
