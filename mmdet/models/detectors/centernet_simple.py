@@ -142,7 +142,6 @@ class CenterNet_Simple(SingleStageDetector):
 
         return bbox_results
 
-
     def show_result(self,
                     img,
                     result,

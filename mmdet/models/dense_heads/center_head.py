@@ -229,14 +229,22 @@ class CenterHead(nn.Module):
         pos_rot_preds = flatten_rot_preds[center_inds]
         pos_rot_targets = flatten_rot_targets[center_inds]
         
+        # import pdb; pdb.set_trace()
+        # print(num_center, num_imgs)
         if num_center > 0:
-            loss_wh = self.loss_wh(pos_wh_preds, pos_wh_targets, avg_factor=num_center + num_imgs)
-            loss_offset = self.loss_offset(pos_offset_preds, pos_offset_targets, avg_factor=num_center + num_imgs)
-            loss_rot = self.loss_rot(pos_rot_preds, pos_rot_targets, avg_factor=num_center + num_imgs)
+            # loss_wh = self.loss_wh(pos_wh_preds, pos_wh_targets, avg_factor=num_center + num_imgs)
+            # loss_offset = self.loss_offset(pos_offset_preds, pos_offset_targets, avg_factor=num_center + num_imgs)
+            # loss_rot = self.loss_rot(pos_rot_preds, pos_rot_targets, avg_factor=num_center + num_imgs)
+            loss_wh = self.loss_wh(pos_wh_preds, pos_wh_targets)
+            loss_offset = self.loss_offset(pos_offset_preds, pos_offset_targets)
+            loss_rot = self.loss_rot(pos_rot_preds, pos_rot_targets)
         else:
             loss_wh = pos_wh_preds.sum()
             loss_offset = pos_offset_preds.sum()
             loss_rot = pos_rot_preds.sum()
+        
+        if loss_wh > 1e5 or loss_offset > 1e5 or loss_rot >1e5:
+            loss_wh = loss_offset = loss_rot = 0
     
         return dict(
               loss_hm = loss_hm,
