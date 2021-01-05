@@ -1,5 +1,5 @@
 model = dict(
-    type='CenterNet_Simple',
+    type='CenterNet',
     pretrained='torchvision://resnet50',    
     backbone=dict(
         type='ResNet',
@@ -24,10 +24,10 @@ model = dict(
         #strides=[8, 16, 32, 64, 128],
         strides=[4, 8, 16, 32, 64],
         regress_ranges=((-1, 32),(32, 64), (64, 128), (128, 256), (256, 1e8)),
-        loss_hm=dict(type='CenterFocalLoss'),
-        loss_wh=dict(type="CenterL1Loss",loss_weight=1.0),
-        loss_offset=dict(type="CenterL1Loss",loss_weight=0.5),
-        loss_rot=dict(type='CenterL1Loss',loss_weight=0.5),
+        loss_hm=dict(type='CenterFocalLoss', loss_weight=1.0),
+        loss_wh=dict(type='SmoothL1Loss', loss_weight=1.0),
+        loss_offset=dict(type='SmoothL1Loss', loss_weight=0.5),
+        loss_rot=dict(type='SmoothL1Loss', loss_weight=2),
         K=100)
 )
 # training and testing settings
@@ -58,8 +58,8 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1000, 1000), keep_ratio=True, is_rot=True),
-    # dict(type='RandomFlip', flip_ratio=0.5),
+    dict(type='Resize', img_scale=(1024, 1024), keep_ratio=True, is_rot=True),
+    # # dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
     dict(type='DefaultFormatBundle'),
@@ -72,7 +72,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1000, 1000),
+        img_scale=(1024, 1024),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True, is_rot=True),
@@ -101,17 +101,17 @@ data = dict(
         ann_file=data_root + 'train/ImageSets/Main/test.txt',
         img_prefix=data_root + 'train/',
         pipeline=test_pipeline))
-evaluation = dict(interval=100, metric='bbox')
+evaluation = dict(interval=5, metric='mAP')
 optimizer = dict(type='Adam', lr=1e-3)
 optimizer_config = dict(grad_clip=None)
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=200,
     warmup_ratio=0.001,
-    step=[24, 32])
-total_epochs = 40
+    step=[40, 50])
+total_epochs = 60
 # Runtime Setting
 checkpoint_config = dict(interval=5)
 # yapf:disable
@@ -124,7 +124,7 @@ log_config = dict(
 # yapf:enable
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/dota/center_res50_L1loss'
+work_dir = './work_dirs/dota/center_res50_0104'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

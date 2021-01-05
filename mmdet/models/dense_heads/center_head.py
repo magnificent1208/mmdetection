@@ -118,6 +118,7 @@ class CenterHead(nn.Module):
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg,
                     bias=self.norm_cfg is None))
+
         self.center_hm = nn.Conv2d(self.feat_channels, self.cls_out_channels, 3, padding=1, bias=True)
         self.center_wh = nn.Conv2d(self.feat_channels, 2, 3, padding=1, bias=True)
         self.center_offset = nn.Conv2d(self.feat_channels, 2, 3, padding=1, bias=True)
@@ -210,13 +211,8 @@ class CenterHead(nn.Module):
         flatten_rot_targets = torch.cat(rot_targets)
         
         center_inds = flatten_wh_targets[...,0].nonzero().reshape(-1) 
-        #print(center_inds)
         num_center = len(center_inds)
 
-        # what about use the centerness * labels to indict an object
-        # loss_cls = self.loss_cls(
-        #     flatten_cls_scores, flatten_labels, # labels gt is small area
-        #     avg_factor=num_pos + num_imgs)  # avoid num_pos is 0
         flatten_cls_scores = torch.clamp(flatten_cls_scores.sigmoid_(), min=1e-4, max=1-1e-4)
         loss_hm = self.loss_hm(flatten_cls_scores, flatten_heatmaps)
         
@@ -229,8 +225,6 @@ class CenterHead(nn.Module):
         pos_rot_preds = flatten_rot_preds[center_inds]
         pos_rot_targets = flatten_rot_targets[center_inds]
         
-        # import pdb; pdb.set_trace()
-        # print(num_center, num_imgs)
         if num_center > 0:
             # loss_wh = self.loss_wh(pos_wh_preds, pos_wh_targets, avg_factor=num_center + num_imgs)
             # loss_offset = self.loss_offset(pos_offset_preds, pos_offset_targets, avg_factor=num_center + num_imgs)
@@ -244,7 +238,7 @@ class CenterHead(nn.Module):
             loss_rot = pos_rot_preds.sum()
         
         if loss_wh > 1e5 or loss_offset > 1e5 or loss_rot >1e5:
-            loss_wh = loss_offset = loss_rot = 0
+            loss_wh = loss_offset = loss_rot = torch.tensor([0]).cuda()
     
         return dict(
               loss_hm = loss_hm,
@@ -319,7 +313,6 @@ class CenterHead(nn.Module):
             (x.reshape(-1), y.reshape(-1)), dim=-1) + stride // 2
         return points
 
-    # TODO: 20201116 update for rot 
     def center_target(self, gt_bboxes_list, gt_labels_list, img_metas, all_level_points):
 
         assert len(self.featmap_sizes) == len(self.regress_ranges)
@@ -582,7 +575,7 @@ def draw_umich_gaussian(heatmap, center, radius, k=1):
     top, bottom = min(y, radius), min(height - y, radius + 1)
     masked_heatmap  = heatmap[y - top:y + bottom, x - left:x + right]
     masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
-    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0: # TODO debug
+    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0: #TODO debug
         np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
     return heatmap
 
@@ -674,7 +667,6 @@ def ctdet_decode_rot(hmap, regs, w_h_, rot, K=100):
     clses = clses.view(batch, K, 1).float()
     scores = scores.view(batch, K, 1)
     # bboxes = _get_rot_box(xs, ys, w_h_, rot)
-    #TODO: May not necessary 
     bboxes = torch.cat([xs, ys, w_h_, rot], dim=2)
     detections = torch.cat([bboxes, rot, scores, clses], dim=2)
     return detections

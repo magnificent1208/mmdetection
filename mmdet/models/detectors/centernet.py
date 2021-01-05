@@ -1,4 +1,7 @@
+import math
+
 import torch
+import numpy as np
 import cv2
 
 from mmdet.core import bbox2result, bbox_mapping_back
@@ -7,7 +10,7 @@ from .single_stage import SingleStageDetector
 
 
 @DETECTORS.register_module()
-class CenterNet_Simple(SingleStageDetector):
+class CenterNet(SingleStageDetector):
 
     def __init__(self,
                  backbone,
@@ -16,7 +19,7 @@ class CenterNet_Simple(SingleStageDetector):
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None):
-        super(CenterNet_Simple, self).__init__(backbone, neck, bbox_head, train_cfg,
+        super(CenterNet, self).__init__(backbone, neck, bbox_head, train_cfg,
                                         test_cfg, pretrained)
     
     def forward_train(self,
@@ -43,7 +46,18 @@ class CenterNet_Simple(SingleStageDetector):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
-        # x = self.extract_feat(img)
+        # import cv2
+        # img0 = np.uint8(img[0].cpu().numpy())
+        # cv2.imwrite('input.jpg', img0.transpose(1,2,0))
+        # img_cv = cv2.imread('input.jpg')
+        # gt_bboxes = np.array(gt_bboxes[0].cpu())
+        # pos = self._get_rot_box(gt_bboxes[:, 0], gt_bboxes[:, 1], gt_bboxes[:, 2:4], gt_bboxes[:, 4])
+        # for box in pos:
+        #     for k in range(4):
+        #         cv2.line(img_cv, (box[2*k], box[2*k + 1]), (box[(2*k + 2) % 8], box[(2*k + 3) % 8]), (0,0,255), 2)
+        # cv2.imwrite('label.jpg', img_cv)
+        # import pdb; pdb.set_trace()           
+
         x = self.backbone(img)
         if self.neck:
             x = self.neck(x)
@@ -154,23 +168,52 @@ class CenterNet_Simple(SingleStageDetector):
                     show=False,
                     wait_time=0,
                     out_file=None):
-        img_cv = cv2.imread(img)
-        img_cv = img_cv.copy()
-        #TODO: exchange [cx,cy,w,h,r] to [x0,y0,x1,y1,x2,y2,x3,y3]
         colors = ((0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 0, 255), (255, 255, 0), (64, 0, 0), (0, 64, 0), (0, 0, 64),
-                  (64, 64, 0), (0, 64, 64), (64, 0 , 64), (128, 0, 0), (0, 128, 0), (0, 0, 128), (128, 128, 0), (128, 0, 128), (0, 128, 128),
-                  (192, 0, 0), (0, 192, 0), (192, 0, 0), (192, 192, 0))
+            (64, 64, 0), (0, 64, 64), (64, 0 , 64), (128, 0, 0), (0, 128, 0), (0, 0, 128), (128, 128, 0), (128, 0, 128), (0, 128, 128),
+            (192, 0, 0), (0, 192, 0), (192, 0, 0), (192, 192, 0))
+
+        if isinstance(img, str):
+            img_cv = cv2.imread(img)
+            img_cv = img_cv.copy()
+        else:
+            img_cv = img
 
         for i in range(self.bbox_head.num_classes):
-            for j in result[i]:
-                if j[9] > score_thr:
-                    for k in range(4):
-                        cv2.line(img_cv, (j[2*k], j[2*k + 1]), (j[(2*k + 2) % 8], j[(2*k + 3) % 8]), colors[i], 2)
-                    print('draw box')
+            if len(result[i]) > 0:
+                draw_boxes = self._get_rot_box(result[i][:, 0], 
+                                               result[i][:, 1], 
+                                               result[i][:, 2:4], 
+                                               result[i][:, 4])
+                for j, box in enumerate(draw_boxes):
+                    if result[i][j][5] > score_thr:
+                        for k in range(4):
+                            cv2.line(img_cv, (box[2*k], box[2*k + 1]), (box[(2*k + 2) % 8], box[(2*k + 3) % 8]), colors[i], 2)
+                        print('draw box')
 
         cv2.imwrite(out_file, img_cv)
 
-        #     # Draw heatmap
+        return True
+
+    def _get_rot_box(self, xs, ys, w_h_, rot):
+        direction = []
+        
+        for angle in rot:
+            cos, sin = math.cos(angle), math.sin(angle)
+            direction.append([cos, sin, -sin, cos])
+        # direction = torch.tensor(direction).clone().detach().cuda()
+        direction = np.array(direction) 
+
+        x0 = xs + w_h_[:,1] * direction[:, 2] / 2 + w_h_[:,0] * direction[:, 0] / 2
+        y0 = ys + w_h_[:,1] * direction[:, 3] / 2 + w_h_[:,0] * direction[:, 1] / 2
+        x1 = x0 - w_h_[:,0] * direction[:, 0]
+        y1 = y0 - w_h_[:,0] * direction[:, 1]
+        x2 = x1 - w_h_[:,1] * direction[:, 2]
+        y2 = y1 - w_h_[:,1] * direction[:, 3]
+        x3 = x0 - w_h_[:,1] * direction[:, 2]
+        y3 = y0 - w_h_[:,1] * direction[:, 3]
+        
+        return np.stack([x0, y0, x1, y1, x2, y2, x3, y3], axis=1).astype(int)
+            #     # Draw heatmap
         #     # heatmap = output[0][0][i] * 10
         #     # heatmap = heatmap.cpu().numpy().astype(np.uint8)
         #     # heatmap = cv.applyColorMap(heatmap, cv.COLORMAP_HOT)

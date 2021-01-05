@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ..builder import LOSSES
 
@@ -41,10 +42,8 @@ class CenterFocalLoss(nn.Module):
         return self.neg_loss(out, target) * self.loss_weight
 
 
-def _reg_loss(regs, gt_regs, mask):
-    mask = mask[:, :, None].expand_as(gt_regs).float()
-    loss = sum(F.l1_loss(r * mask, gt_regs * mask, reduction='sum') /
-               (mask.sum() + 1e-4) for r in regs)
+def _reg_loss(regs, gt_regs):
+    loss = F.smooth_l1_loss(regs, gt_regs, reduction='sum')
     return loss / len(regs)
 
 
