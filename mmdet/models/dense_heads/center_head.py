@@ -719,7 +719,7 @@ def _tranpose_and_gather_feature(feat, ind):
     return feat
 
 
-def _topk(scores, K=40):
+def _topk(scores, K=100):
     batch, cat, height, width = scores.size()
 
     topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)

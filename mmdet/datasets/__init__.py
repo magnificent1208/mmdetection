@@ -12,8 +12,10 @@ from .utils import replace_ImageToTensor
 from .voc import VOCDataset
 from .wider_face import WIDERFaceDataset
 from .xml_style import XMLDataset
+
 from .tunnel_obj import TunnelObjDataset
 from .tunnel_rot import TunnelRotDataset
+from .sim311 import Sim311Dataset
 
 
 __all__ = [
@@ -22,5 +24,6 @@ __all__ = [
     'LVISV1Dataset', 'GroupSampler', 'DistributedGroupSampler',
     'DistributedSampler', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
     'ClassBalancedDataset', 'WIDERFaceDataset', 'DATASETS', 'PIPELINES',
-    'build_dataset', 'replace_ImageToTensor', 'TunnelObjDataset', 'TunnelRotDataset'
+    'build_dataset', 'replace_ImageToTensor',
+    'TunnelObjDataset', 'TunnelRotDataset', 'Sim311Dataset'
 ]

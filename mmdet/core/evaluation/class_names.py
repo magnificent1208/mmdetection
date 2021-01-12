@@ -110,6 +110,18 @@ def tunnel_rot_classes():
         'dljt'
     ]
 
+def sim311_classes():
+    return [
+        'ljjj', 'nzxj', 'zjgb', 'xcxj', 'qxz', 'uxh', 'qdp', 'fzc', 'jyz', 
+        'plastic', 'jyz_ps', 'ld', 'fzc_sh', 'nest', 'fzc_xs'
+    ]
+
+def sim311_full_classes():
+    return [
+        'ljjj', 'nzxj', 'zjgb', 'xcxj', 'qxz', 'uxh', 'qdp', 'fzc', 'jyz', 
+        'uxgj', 'plastic', 'jyz_ps', 'ld', 'fzc_sh', 'lszc', 'nest', 'fzc_xs'
+    ]
+
 
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
@@ -120,7 +132,8 @@ dataset_aliases = {
     'cityscapes': ['cityscapes'],
     'dota': ['dota'],
     'tunnel_obj': ['tunnel_obj'], 
-    'tunneo_rot': ['tunnel_rot']
+    'tunneo_rot': ['tunnel_rot'],
+    'sim311': ['sim311', 'sim311_full']
 }
 
 

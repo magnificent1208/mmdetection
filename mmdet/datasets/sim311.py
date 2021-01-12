@@ -110,7 +110,7 @@ class Sim311Dataset(XMLDataset):
         eval_results = {}
         if metric == 'mAP':
             assert isinstance(iou_thr, float)
-            ds_name = 'sim311'
+            ds_name = 'sim311' if len(self.CLASSES) == 15 else 'sim311_full'
             mean_ap, _ = eval_map(
                 results,
                 annotations,

@@ -56,8 +56,6 @@ def rename_filename(tree, root, xml_name, img_dir = './JPEGImages', img_form='.j
     return True
 
 
-
-
 def main():
     for xml in xml_dir:
         xml_path = osp.join(base_dir, xml)

@@ -18,13 +18,13 @@ from mmdet.apis import init_detector, inference_detector
 # imgs = ['C00510019_59.4.jpg', 'C00510020_60.4.jpg', 'C00510003_60.5.jpg', 'C00490125_66.5.jpg']
 # img_dir = './'
 
-work_dir_path = 'center_res50_0104'
+work_dir_path = 'center_simple'
 dataset = 'dota'
 device = 'cuda'
-thr = 0.7
+thr = 0.3
 
 imgs = ['P1446_1600_1046.png', 'P1139_4800_3200.png', 'P0122_490_556.png', 'P2552_800_1947.png', 'P1308_3000_4000.png', 'P1509_2076_3200.png', 
-        'P0236_450_313.png', 'P0896_1438_800.png', 'P1361_1600_800.png', 'P1413_2889_2400.png', 'P1354_3000_1600.png', 'P1366_1600_0.png']
+        'P0236_450_313.png', 'P0896_1438_800.png', 'P1413_2889_2400.png']
 img_dir = './data/dota/train/JPEGImages/'
 
 # imgs = ['img(2).JPG', 'img(7).JPG', 'img(12).JPG', 'img(17).JPG']
