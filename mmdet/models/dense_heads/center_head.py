@@ -237,8 +237,8 @@ class CenterHead(nn.Module):
             loss_offset = pos_offset_preds.sum()
             loss_rot = pos_rot_preds.sum()
         
-        if loss_wh > 1e5 or loss_offset > 1e5 or loss_rot >1e5:
-            loss_wh = loss_offset = loss_rot = torch.tensor([0]).cuda()
+        # if loss_wh > 1e5 or loss_offset > 1e5 or loss_rot >1e5:
+        #     loss_wh = loss_offset = loss_rot = torch.tensor([0]).cuda()
     
         return dict(
               loss_hm = loss_hm,
@@ -539,7 +539,7 @@ class CenterHead(nn.Module):
                 cls_scores, wh_preds, offset_preds, rot_preds, featmap_sizes): # 取出每一层的点
             assert cls_score.size()[-2:] == wh_pred.size()[-2:] == offset_pred.size()[-2:] == rot_pred.size()[-2:] == featmap_size
             
-            output_w, output_h = featmap_size
+            output_h, output_w = featmap_size
             #实际上得到了每一层的hm, wh, offset
             hm = torch.clamp(cls_score.sigmoid_(), min=1e-4, max=1-1e-4).unsqueeze(0) # 增加一个纬度
             wh = wh_pred.unsqueeze(0) # 这里需要乘以featuremap的尺度
@@ -565,7 +565,7 @@ def gaussian2D(shape, sigma=1):
 
 def draw_umich_gaussian(heatmap, center, radius, k=1):
     diameter = 2 * radius + 1
-    gaussian = gaussian2D((diameter, diameter), sigma=diameter / 2)
+    gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
     
     x, y = int(center[0]), int(center[1])
     
@@ -645,7 +645,6 @@ def ctdet_decode_rot(hmap, regs, w_h_, rot, K=100):
         hmap = (hmap[0:1] + flip_tensor(hmap[1:2])) / 2
         w_h_ = (w_h_[0:1] + flip_tensor(w_h_[1:2])) / 2
         regs = regs[0:1]
-        # TODO: 检查此处是否需要
         rot = rot[0:1]
 
     batch = 1

@@ -122,6 +122,8 @@ def sim311_full_classes():
         'uxgj', 'plastic', 'jyz_ps', 'ld', 'fzc_sh', 'lszc', 'nest', 'fzc_xs'
     ]
 
+def jsxs_classes():
+    return ['jsxs']
 
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
@@ -133,7 +135,8 @@ dataset_aliases = {
     'dota': ['dota'],
     'tunnel_obj': ['tunnel_obj'], 
     'tunneo_rot': ['tunnel_rot'],
-    'sim311': ['sim311', 'sim311_full']
+    'sim311': ['sim311', 'sim311_full'],
+    'jsxs': ['jsxs']
 }
 
 

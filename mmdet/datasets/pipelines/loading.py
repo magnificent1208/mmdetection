@@ -64,7 +64,11 @@ class LoadImageFromFile(object):
         results['filename'] = filename
         results['ori_filename'] = results['img_info']['filename']
         results['img'] = img
-        results['img_shape'] = img.shape
+        try:
+            results['img_shape'] = img.shape
+        except:
+            print(filename)
+            print(img)
         results['ori_shape'] = img.shape
         results['img_fields'] = ['img']
         return results

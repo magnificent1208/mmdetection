@@ -16,6 +16,7 @@ from .xml_style import XMLDataset
 from .tunnel_obj import TunnelObjDataset
 from .tunnel_rot import TunnelRotDataset
 from .sim311 import Sim311Dataset
+from .jsxs import JSXSDataset
 
 
 __all__ = [
@@ -25,5 +26,5 @@ __all__ = [
     'DistributedSampler', 'build_dataloader', 'ConcatDataset', 'RepeatDataset',
     'ClassBalancedDataset', 'WIDERFaceDataset', 'DATASETS', 'PIPELINES',
     'build_dataset', 'replace_ImageToTensor',
-    'TunnelObjDataset', 'TunnelRotDataset', 'Sim311Dataset'
+    'TunnelObjDataset', 'TunnelRotDataset', 'Sim311Dataset', 'JSXSDataset'
 ]
