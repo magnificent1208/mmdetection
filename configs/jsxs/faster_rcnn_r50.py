@@ -161,15 +161,27 @@ data = dict(
         pipeline=test_pipeline))
 evaluation = dict(interval=5, metric='mAP')
 # optimizer
-optimizer = dict(type='SGD', lr=0, momentum=0.9, weight_decay=0.0001)
+#optimizer = dict(type='SGD', lr=0, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='Adam', lr=0.0003, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
-lr_config = dict(
-    policy='step',
-    warmup='linear',
-    warmup_iters=200,
-    warmup_ratio=1.0 / 3,
-    step=[24, 40])
+# lr_config = dict(
+#     policy='step',
+#     warmup='linear',
+#     warmup_iters=200,
+#     warmup_ratio=1.0 / 3,
+#     step=[24, 40])
+
+# lr_config = dict(
+#     policy='CosineAnnealing',
+#     warmup='linear',
+#     warmup_iters=1000,
+#     warmup_ratio=1.0 / 10,
+#     min_lr_ratio=1e-5)
+
+lr_config = dict(policy='poly', power=0.9, min_lr=1e-4, by_epoch=False)
+
+
 checkpoint_config = dict(interval=5)
 # yapf:disable
 log_config = dict(
@@ -183,7 +195,7 @@ log_config = dict(
 total_epochs = 55
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/jsxs/faster_rcnn_r50_0114_boxratios'
+work_dir = './work_dirs/jsxs/faster_rcnn_r50_0115_maggie'
 # load_from = './work_dirs/jsxs/faster_rcnn_r50_0113_stage2/latest.pth'
 load_from = None
 resume_from = None

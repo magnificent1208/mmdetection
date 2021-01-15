@@ -34,42 +34,6 @@ class DotaDataset(XMLDataset):
     def __init__(self, **kwargs):
         super(DotaDataset, self).__init__(**kwargs)
 
-        # self.num_classes = 16
-        # self.class_names = DOTA_NAMES
-
-        # # 处理可选择id
-        # self.cat_ids = {v: i for i, v in enumerate(DOTA_NAMES)}
-        # self.data_rng = np.random.RandomState(123)
-
-        # self.mean = np.array(DOTA_MEAN, dtype=np.float32).reshape(1, 1, 3)
-        # self.std = np.array(DOTA_STD, dtype=np.float32).reshape(1, 1, 3)
-        
-        # self.eig_val = np.array(VOC_EIGEN_VALUES, dtype=np.float32)
-        # self.eig_vec = np.array(VOC_EIGEN_VECTORS, dtype=np.float32)
-
-        # self.split = split
-        # self.data_dir = os.path.join(data_dir, 'dota/train')
-        # self.img_dir = os.path.join(self.data_dir, 'JPEGImages')
-        # self.xml_dir = os.path.join(self.data_dir, 'Annotations')
-        # self.annot_path = os.path.join(
-        #     self.data_dir, 'ImageSets/Main/', '%s.txt' % split)
-
-        # # 挑选100个
-        # self.max_objs = 200
-        # self.padding = 31  # 127 for hourglass
-        # self.down_ratio = 4  # 降采样4倍
-
-        # self.img_size = {'h': img_size, 'w': img_size}
-        # self.fmap_size = {'h': img_size // self.down_ratio,
-        #                   'w': img_size // self.down_ratio}
-        # self.rand_scales = np.arange(0.6, 1.4, 0.1)
-        # self.gaussian_iou = 0.7
-
-        # print('==> initializing DOTA %s data.' % split)
-        # self.images = self.get_images_name(self.annot_path)
-        # self.num_samples = len(self.images)
-        # print('Loaded %d %s samples' % (self.num_samples, split))
-
     def load_annotations(self, ann_file):
         """Load annotation from XML style ann_file.
 

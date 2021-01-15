@@ -20,7 +20,7 @@ INF = 1e8
 class CenterHead(nn.Module):
 
     def __init__(self,
-                 num_classes, # init 80
+                 num_classes,
                  in_channels,
                  feat_channels=256,
                  stacked_convs=1,
@@ -37,7 +37,7 @@ class CenterHead(nn.Module):
                      type="SmoothL1Loss",
                      loss_weight=0.1),
                  loss_offset=dict(
-                     type='SmoothL1Loss', 
+                     type='SmoothL1Loss',
                      beta=1.0, 
                      loss_weight=1),
                  loss_rot=dict(
@@ -50,7 +50,6 @@ class CenterHead(nn.Module):
         super(CenterHead, self).__init__()
 
         self.num_classes = num_classes
-        # self.cls_out_channels = num_classes - 1
         self.cls_out_channels = num_classes
         self.in_channels = in_channels
         self.feat_channels = feat_channels
@@ -168,91 +167,15 @@ class CenterHead(nn.Module):
              img_metas,
              gt_bboxes_ignore=None):
 
-        assert len(cls_scores) == len(wh_preds) == len(offset_preds) == len(rot_preds)
-        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
-        self.featmap_sizes = featmap_sizes
-        import pdb; pdb.set_trace()
-        all_level_points = self.get_points(featmap_sizes, offset_preds[0].dtype,
-                                            offset_preds[0].device)
+            regs = [_tranpose_and_gather_feature(r, batch['inds']) for r in wh_preds]
+            w_h_ = [_tranpose_and_gather_feature(r, batch['inds']) for r in offset_preds]
+            rot = [_tranpose_and_gather_feature(r, batch['inds']) for r in rot_preds]
 
-        self.tensor_dtype = offset_preds[0].dtype
-        self.tensor_device = offset_preds[0].device
-        heatmaps, wh_targets, offset_targets, rot_targets = self.center_target(gt_bboxes, gt_labels, img_metas, all_level_points)
+            loss_hm = self.loss_hm(cls_scores)
+            loss_wh = self.loss_wh(pos_wh_preds, pos_wh_targets)
+            loss_offset = self.loss_offset(pos_offset_preds, pos_offset_targets)
+            loss_rot = self.loss_rot(pos_rot_preds, pos_rot_targets,)
 
-        num_imgs = cls_scores[0].size(0) # batch_size
-
-        # flatten cls_scores, bbox_preds and centerness
-        flatten_cls_scores = [
-            cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
-            for cls_score in cls_scores
-        ] # cls_scores(num_levels, batch_size, 80, h, w)  => (num_levels, batch_size * w * h, 80)
-        flatten_wh_preds = [
-            wh_pred.permute(0, 2, 3, 1).reshape(-1, 2) # batchsize, h, w, 2 => batchsize, h, w, 2
-            for wh_pred in wh_preds
-        ]
-        flatten_offset_preds = [
-            offset_pred.permute(0, 2, 3, 1).reshape(-1, 2)
-            for offset_pred in offset_preds
-        ]
-        flatten_rot_preds = [
-            rot_pred.permute(0, 2, 3, 1).reshape(-1, 1)
-            for rot_pred in rot_preds
-        ]
-       
-        flatten_cls_scores = torch.cat(flatten_cls_scores)
-        flatten_wh_preds = torch.cat(flatten_wh_preds)
-        flatten_offset_preds = torch.cat(flatten_offset_preds)
-        flatten_rot_preds = torch.cat(flatten_rot_preds)
-       
-        # targets
-        flatten_heatmaps = torch.cat(heatmaps)
-        flatten_wh_targets = torch.cat(wh_targets) # torch.Size([all_level_points, 2])
-        flatten_offset_targets = torch.cat(offset_targets)
-        flatten_rot_targets = torch.cat(rot_targets)
-
-        # repeat points to align with bbox_preds
-        # flatten_points = torch.cat(
-        #     [points.repeat(num_imgs, 1) for points in all_level_points])
-
-        # pos_inds = flatten_labels.nonzero().reshape(-1)
-        #print(flatten_wh_targets.shape)
-        #print(flatten_wh_targets.nonzero())
-        center_inds = flatten_wh_targets[...,0].nonzero().reshape(-1) 
-        #print(center_inds)
-        num_center = len(center_inds)
-        #print(num_center)
-
-        # what about use the centerness * labels to indict an object
-        # loss_cls = self.loss_cls(
-        #     flatten_cls_scores, flatten_labels, # labels gt is small area
-        #     avg_factor=num_pos + num_imgs)  # avoid num_pos is 0
-        flatten_cls_scores = torch.clamp(flatten_cls_scores.sigmoid_(), min=1e-4, max=1-1e-4)
-        loss_hm = self.loss_hm(flatten_cls_scores, flatten_heatmaps)
-        
-        pos_wh_targets = flatten_wh_targets[center_inds]
-        pos_wh_preds = flatten_wh_preds[center_inds]
-        
-        pos_offset_preds = flatten_offset_preds[center_inds]
-        pos_offset_targets = flatten_offset_targets[center_inds]
-
-        pos_rot_preds = flatten_rot_preds[center_inds]
-        pos_rot_targets = flatten_rot_targets[center_inds]
-        
-        if num_center > 0:
-            # TODO: use the iou loss
-            # center_points = flatten_points[center_inds]
-            # center_decoded_bbox_preds = wh_offset2bbox(center_points, pos_wh_preds, pos_offset_preds)
-            # center_decoded_bbox_targets = wh_offset2bbox(center_points, pos_wh_targets, pos_offset_targets)
-            loss_wh = self.loss_wh(pos_wh_preds, pos_wh_targets, avg_factor=num_center + num_imgs)
-            #loss_wh = F.l1_loss(pos_wh_preds, pos_wh_targets, reduction='sum') / (num_center + num_imgs)
-            #loss_wh = 0.1 * loss_wh
-            loss_offset = self.loss_offset(pos_offset_preds, pos_offset_targets, avg_factor=num_center + num_imgs)
-            loss_rot = self.loss_rot(pos_rot_preds, pos_rot_targets, avg_factor=num_center + num_imgs)
-        else:
-            loss_wh = pos_wh_preds.sum()
-            loss_offset = pos_offset_preds.sum()
-            loss_rot = pos_rot_preds.sum()
-    
         return dict(
               loss_hm = loss_hm,
               loss_wh = loss_wh,
@@ -325,7 +248,6 @@ class CenterHead(nn.Module):
             (x.reshape(-1), y.reshape(-1)), dim=-1) + stride // 2
         return points
 
-    # TODO: 20201116 update for rot 
     def center_target(self, gt_bboxes_list, gt_labels_list, img_metas, all_level_points):
 
         assert len(self.featmap_sizes) == len(self.regress_ranges)
@@ -364,8 +286,6 @@ class CenterHead(nn.Module):
                     [rot_targets[i] for rot_targets in rot_targets_list]))        
         return concat_lvl_heatmaps, concat_lvl_wh_targets, concat_lvl_offset_targets, concat_lvl_rot_targets
 
-
-    # TODO: 20201116 update for rot 
     def center_target_single(self, gt_bboxes, gt_labels, img_meta):
         """
         single image

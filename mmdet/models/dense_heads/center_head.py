@@ -1,17 +1,17 @@
-import torch
-import torch.nn as nn
-from mmcv.cnn import normal_init
-import numpy as np
-import cv2
 import math
 
+import torch
+import torch.nn as nn
+import numpy as np
+import cv2
 
-from mmdet.core import multi_apply, multiclass_nms, distance2bbox
+from mmcv.cnn import normal_init
 from mmcv.runner import force_fp32
-from ..builder import build_loss, HEADS
 from mmcv.cnn import ConvModule, Scale, bias_init_with_prob, normal_init
+from mmdet.core import multi_apply, multiclass_nms, distance2bbox
+
+from ..builder import build_loss, HEADS
 from ..utils import gaussian_radius, gen_gaussian_target
-from .corner_head import CornerHead
 
 INF = 1e8
 
@@ -20,7 +20,7 @@ INF = 1e8
 class CenterHead(nn.Module):
 
     def __init__(self,
-                 num_classes, # init 80
+                 num_classes,
                  in_channels,
                  feat_channels=256,
                  stacked_convs=1,
@@ -50,7 +50,6 @@ class CenterHead(nn.Module):
         super(CenterHead, self).__init__()
 
         self.num_classes = num_classes
-        # self.cls_out_channels = num_classes - 1
         self.cls_out_channels = num_classes
         self.in_channels = in_channels
         self.feat_channels = feat_channels
@@ -187,7 +186,7 @@ class CenterHead(nn.Module):
             for cls_score in cls_scores
         ] # cls_scores(num_levels, batch_size, 80, h, w)  => (num_levels, batch_size * w * h, 80)
         flatten_wh_preds = [
-            wh_pred.permute(0, 2, 3, 1).reshape(-1, 2) # batchsize, h, w, 2 => batchsize, h, w, 2
+            wh_pred.permute(0, 2, 3, 1).reshape(-1, 2) # batchsize, h, w, 2 => batchsize * h * w, 2
             for wh_pred in wh_preds
         ]
         flatten_offset_preds = [
@@ -210,7 +209,8 @@ class CenterHead(nn.Module):
         flatten_offset_targets = torch.cat(offset_targets)
         flatten_rot_targets = torch.cat(rot_targets)
         
-        center_inds = flatten_wh_targets[...,0].nonzero().reshape(-1) 
+        # center_inds = flatten_heatmaps[..., 0].nonzero().reshape(-1) 
+        center_inds = flatten_wh_targets[..., 0].nonzero().reshape(-1)
         num_center = len(center_inds)
 
         flatten_cls_scores = torch.clamp(flatten_cls_scores.sigmoid_(), min=1e-4, max=1-1e-4)
@@ -376,6 +376,7 @@ class CenterHead(nn.Module):
         # get the target shape for each image
         for i in range(num_levels):
             w, h = self.featmap_sizes[i]
+            # BUG
             hm = np.zeros((self.cls_out_channels, w, h), dtype=np.float32)
             heatmaps_targets.append(hm)
             wh = np.zeros((w, h, 2), dtype=np.float32)
@@ -445,31 +446,21 @@ class CenterHead(nn.Module):
             hm.transpose(1, 2, 0).reshape(-1, self.cls_out_channels)
             for hm in heatmaps_targets
         ]
-        #for i in range(len(flatten_heatmaps_targets)):
-        #    print(flatten_heatmaps_targets[i].shape)
-            
+
         heatmaps_targets = np.concatenate(flatten_heatmaps_targets, axis=0) 
-        #print(heatmaps_targets.shape) # (13343, 80)
         
-        flatten_wh_targets = [
-            wh.reshape(-1, 2) for wh in wh_targets
-        ]
+        flatten_wh_targets = [wh.reshape(-1, 2) for wh in wh_targets]
         wh_targets = np.concatenate(flatten_wh_targets)
         
-        flatten_offset_targets = [
-            offset.reshape(-1, 2) for offset in offset_targets
-        ]
+        flatten_offset_targets = [offset.reshape(-1, 2) for offset in offset_targets]
         offset_targets = np.concatenate(flatten_offset_targets)
 
-        flatten_rot_targets = [
-            rot.reshape(-1, 1) for rot in rot_targets
-        ]
+        flatten_rot_targets = [rot.reshape(-1, 1) for rot in rot_targets]
         rot_targets = np.concatenate(flatten_rot_targets)
 
         # transform the heatmaps_targets, wh_targets, offset_targets into tensor
         heatmaps_targets = torch.from_numpy(np.stack(heatmaps_targets))
         heatmaps_targets = torch.as_tensor(heatmaps_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
-        # heatmaps_targets = heatmaps_targets.clone().detach().dtype(self.tensor_dtype).device(self.tensor_device)
         wh_targets = torch.from_numpy(np.stack(wh_targets))
         wh_targets = torch.as_tensor(wh_targets.detach(), dtype=self.tensor_dtype, device=self.tensor_device)
         offset_targets = torch.from_numpy(np.stack(offset_targets))
@@ -575,7 +566,7 @@ def draw_umich_gaussian(heatmap, center, radius, k=1):
     top, bottom = min(y, radius), min(height - y, radius + 1)
     masked_heatmap  = heatmap[y - top:y + bottom, x - left:x + right]
     masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
-    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0: #TODO debug
+    if min(masked_gaussian.shape) > 0 and min(masked_heatmap.shape) > 0:
         np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
     return heatmap
 
@@ -737,6 +728,20 @@ def _topk(scores, K=100):
 
 
 def post_process(dets, c, s, out_height, out_width, scale, num_classes):
+    """将预测结果转换为CPU上的Numpy数组，并映射到原始图像上
+
+    Args:
+        dets (Tensor(GPU)): 筛选出的TopK个候选结果
+        c (tuple[2]): 图片中心点坐标
+        s (list[2]): 横纵维度的缩放尺寸
+        out_height (int): 特征图高度
+        out_width (int): 特征图宽度
+        scale (): [description]
+        num_classes ([type]): [description]
+
+    Returns:
+        [type]: [description]
+    """
     dets = dets.detach().cpu().numpy()
     dets = dets.reshape(1, -1, dets.shape[2]) # (batch, K, 10)
 
@@ -752,6 +757,8 @@ def post_process(dets, c, s, out_height, out_width, scale, num_classes):
 
 
 def ctdet_post_process(dets, c, s, h, w, num_classes):
+    """对结果框进行映射，并按预测类别分类
+    """
     ret = []
 
     for i in range(dets.shape[0]):
@@ -773,6 +780,14 @@ def ctdet_post_process(dets, c, s, h, w, num_classes):
         ret.append(top_preds)
 
     return ret
+
+
+def transform_preds(coords, center, scale, output_size):
+    target_coords = np.zeros(coords.shape)
+    trans = get_affine_transform(center, scale, 0, output_size, inv=1) 
+    for p in range(coords.shape[0]):
+        target_coords[p, 0:2] = affine_transform(coords[p, 0:2], trans)
+    return target_coords
 
 
 def merge_outputs(detections, num_classes, num_keep):
@@ -908,11 +923,3 @@ def soft_nms(boxes, sigma=0.5, Nt=0.3, threshold=0.01, method=0):
     keep = [i for i in range(N)]
     boxes = boxes[keep]
     return boxes
-
-
-def transform_preds(coords, center, scale, output_size):
-    target_coords = np.zeros(coords.shape)
-    trans = get_affine_transform(center, scale, 0, output_size, inv=1) 
-    for p in range(coords.shape[0]):
-        target_coords[p, 0:2] = affine_transform(coords[p, 0:2], trans)
-    return target_coords
