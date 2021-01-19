@@ -79,6 +79,16 @@ class CenterNet(SingleStageDetector):
         """
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
+
+        # Draw heatmap
+        # import cv2 as cv
+        # for i in range(16):
+        #     heatmap = outs[0][3][0][i] * 10
+        #     heatmap = heatmap.cpu().numpy().astype(np.uint8)
+        #     heatmap = cv.applyColorMap(heatmap, cv.COLORMAP_HOT)
+        #     # heatmap = cv.applyColorMap(heatmap, cv.COLORMAP_HOT)
+        #     cv.imwrite('heatmap_{}.jpg'.format(i), heatmap)
+        # import pdb; pdb.set_trace()
         bbox_list = self.bbox_head.get_bboxes(*outs, img_metas, rescale=rescale)
         
         return bbox_list
@@ -188,10 +198,8 @@ class CenterNet(SingleStageDetector):
                     if result[i][j][5] > score_thr:
                         for k in range(4):
                             cv2.line(img_cv, (box[2*k], box[2*k + 1]), (box[(2*k + 2) % 8], box[(2*k + 3) % 8]), colors[i], 2)
-                        print('draw box')
 
         cv2.imwrite(out_file, img_cv)
-
         return True
 
     def _get_rot_box(self, xs, ys, w_h_, rot):

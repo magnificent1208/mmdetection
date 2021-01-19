@@ -201,6 +201,7 @@ def main():
             ]:
                 eval_kwargs.pop(key, None)
             eval_kwargs.update(dict(metric=args.eval, **kwargs))
+            import pdb; pdb.set_trace()
             print(dataset.evaluate(outputs, **eval_kwargs))
 
 

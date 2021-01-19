@@ -53,6 +53,7 @@ def iou_rotate_calculate(boxes1, boxes2):
     """Calculate iou for a pair of rot box.(Matrix not support)
     """
     #TODO: Support for Matrix.
+    import pdb; pdb.set_trace()
     area1 = boxes1[:, 2] * boxes1[:, 3]
     area2 = boxes2[:, 2] * boxes2[:, 3]
     ious = np.zeros([boxes1.shape[0], boxes2.shape[0]])

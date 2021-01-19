@@ -362,7 +362,7 @@ class CenterHead(nn.Module):
         # transform the gt_bboxes, gt_labels to numpy
         gt_bboxes = gt_bboxes.data.cpu().numpy()
         gt_labels = gt_labels.data.cpu().numpy()
-        img_w, img_h = img_meta['img_shape'][:2]
+        img_h, img_w = img_meta['img_shape'][:2]
         
         num_objs = gt_labels.shape[0]
 
@@ -375,67 +375,66 @@ class CenterHead(nn.Module):
         rot_targets = []
         # get the target shape for each image
         for i in range(num_levels):
-            w, h = self.featmap_sizes[i]
-            # BUG
-            hm = np.zeros((self.cls_out_channels, w, h), dtype=np.float32)
+            h, w = self.featmap_sizes[i]
+            hm = np.zeros((self.cls_out_channels, h, w), dtype=np.float32)
             heatmaps_targets.append(hm)
-            wh = np.zeros((w, h, 2), dtype=np.float32)
+            wh = np.zeros((h, w, 2), dtype=np.float32)
             wh_targets.append(wh)
-            offset = np.zeros((w, h, 2), dtype=np.float32)
+            offset = np.zeros((h, w, 2), dtype=np.float32)
             offset_targets.append(offset)
-            rot = np.zeros((w, h, 1), dtype=np.float32)
+            rot = np.zeros((h, w, 1), dtype=np.float32)
             rot_targets.append(rot)
 
         for k in range(num_objs):
             bbox = gt_bboxes[k]
             cls_id = gt_labels[k]
             
-            origin_w, origin_h = bbox[2], bbox[3]
+            origin_h, origin_w = bbox[3], bbox[2]
+            max_h_w = max(origin_h, origin_w)
             # 根据max_h_w在哪一层将output设置为当前层的
             index_levels = []
             for i in range(num_levels):
                 min_regress_distance, max_regress_distance = self.regress_ranges[i]
-                if not self.use_cross and (origin_w > min_regress_distance) and (origin_w <= max_regress_distance):
+                if not self.use_cross and (max_h_w > min_regress_distance) and (max_h_w <= max_regress_distance):
                     index_levels.append(i)
                     break
                 
                 if self.use_cross:
                     min_regress_distance = min_regress_distance * 0.8
                     max_regress_distance = max_regress_distance * 1.3
-                    if (origin_w > min_regress_distance) and (origin_w <= max_regress_distance):
+                    if (max_h_w > min_regress_distance) and (max_h_w <= max_regress_distance):
                         index_levels.append(i)
                     
             for index_level in index_levels:
-                output_w, output_h = self.featmap_sizes[index_level]
+                output_h, output_w = self.featmap_sizes[index_level]
                 hm = heatmaps_targets[index_level]
                 wh = wh_targets[index_level]
                 offset = offset_targets[index_level]
                 rot = rot_targets[index_level]
 
-                center = np.array([img_w / 2, img_h / 2], dtype=np.float32)
-                scale = max(img_w, img_h) * 1.0
+                center = np.array([img_h / 2, img_w / 2], dtype=np.float32)
+                scale = max(img_h, img_w) * 1.0
               
-                trans_output = get_affine_transform(center, scale, 0, [output_w, output_h])
+                trans_output = get_affine_transform(center, scale, 0, [output_h, output_w])
                 bbox[:2] = affine_transform(bbox[:2], trans_output)
                 bbox[2:4] = affine_transform(bbox[2:4], trans_output)
-                w, h = bbox[2], bbox[3]
+                h, w = bbox[3], bbox[2]
                 # 转换到当层
                 if h > 0 and w > 0:
-                    radius = gaussian_radius((math.ceil(w), math.ceil(h)), self.gaussian_iou)
+                    radius = gaussian_radius((math.ceil(h), math.ceil(w)), self.gaussian_iou)
                     radius = max(0, int(radius))
                     ct = np.array([bbox[0] , bbox[1]], dtype=np.float32)
                     ct_int = ct.astype(np.int32)
-
                     draw_umich_gaussian(hm[cls_id], ct_int, radius)
 
                     h, w = 1. * h, 1. * w
                     offset_count = ct - ct_int # h, w
 
-                    wh[ct_int[0], ct_int[1], 0] = w 
-                    wh[ct_int[0], ct_int[1], 1] = h 
-                    offset[ct_int[0], ct_int[1], 0] = offset_count[0]
-                    offset[ct_int[0], ct_int[1], 1] = offset_count[1]
-                    rot[ct_int[0], ct_int[1]] = bbox[4]
+                    wh[ct_int[1], ct_int[0], 0] = w 
+                    wh[ct_int[1], ct_int[0], 1] = h 
+                    offset[ct_int[1], ct_int[0], 0] = offset_count[0]
+                    offset[ct_int[1], ct_int[0], 1] = offset_count[1]
+                    rot[ct_int[1], ct_int[0]] = bbox[4]
             
                 heatmaps_targets[index_level] = hm
                 wh_targets[index_level] = wh
@@ -446,7 +445,6 @@ class CenterHead(nn.Module):
             hm.transpose(1, 2, 0).reshape(-1, self.cls_out_channels)
             for hm in heatmaps_targets
         ]
-
         heatmaps_targets = np.concatenate(flatten_heatmaps_targets, axis=0) 
         
         flatten_wh_targets = [wh.reshape(-1, 2) for wh in wh_targets]
@@ -500,11 +498,11 @@ class CenterHead(nn.Module):
             rot_pred_list = [
                 rot_preds[i][img_id].detach() for i in range(num_levels)
             ]
-            #img_shape = img_metas[img_id]['img_shape']
+
             scale_factor = img_metas[img_id]['scale_factor']
-            img_w, img_h = img_metas[img_id]['img_shape'][:2]
-            center = np.array([img_w / 2, img_h / 2], dtype=np.float32)
-            scale = max(img_w, img_h) * 1.0
+            img_h, img_w = img_metas[img_id]['img_shape'][:2]
+            center = np.array([img_h / 2, img_w / 2], dtype=np.float32)
+            scale = max(img_h, img_w) * 1.0
 
             det_bboxes = self.get_bboxes_single(cls_score_list,  wh_pred_list,
                                                 offset_pred_list, rot_pred_list,
@@ -529,7 +527,6 @@ class CenterHead(nn.Module):
         for cls_score, wh_pred, offset_pred, rot_pred, featmap_size in zip(
                 cls_scores, wh_preds, offset_preds, rot_preds, featmap_sizes): # 取出每一层的点
             assert cls_score.size()[-2:] == wh_pred.size()[-2:] == offset_pred.size()[-2:] == rot_pred.size()[-2:] == featmap_size
-            
             output_h, output_w = featmap_size
             #实际上得到了每一层的hm, wh, offset
             hm = torch.clamp(cls_score.sigmoid_(), min=1e-4, max=1-1e-4).unsqueeze(0) # 增加一个纬度
@@ -539,7 +536,7 @@ class CenterHead(nn.Module):
             dets = ctdet_decode_rot(hm, reg, wh, rot, K=self.K)
             dets = post_process(dets, c, s, output_h, output_w, scale=scale_factor, num_classes=self.num_classes)
             detections.append(dets)
-        
+
         results = merge_outputs(detections, self.num_classes, self.K) # 单张图的结果
         return results
 
@@ -550,7 +547,6 @@ def gaussian2D(shape, sigma=1):
 
     h = np.exp(-(x * x + y * y) / (2 * sigma * sigma))
     h[h < np.finfo(h.dtype).eps * h.max()] = 0
-    # 限制最小的值
     return h
 
 
@@ -559,7 +555,6 @@ def draw_umich_gaussian(heatmap, center, radius, k=1):
     gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
     
     x, y = int(center[0]), int(center[1])
-    
     height, width = heatmap.shape[0:2]
     
     left, right = min(x, radius), min(width - x, radius + 1)
@@ -643,7 +638,6 @@ def ctdet_decode_rot(hmap, regs, w_h_, rot, K=100):
     hmap = _nms(hmap)  # perform nms on heatmaps
 
     scores, inds, clses, ys, xs = _topk(hmap, K=K)
-
     regs = _tranpose_and_gather_feature(regs, inds)
     regs = regs.view(batch, K, 2)
     xs = xs.view(batch, K, 1) + regs[:, :, 0:1]
@@ -658,28 +652,9 @@ def ctdet_decode_rot(hmap, regs, w_h_, rot, K=100):
     scores = scores.view(batch, K, 1)
     # bboxes = _get_rot_box(xs, ys, w_h_, rot)
     bboxes = torch.cat([xs, ys, w_h_, rot], dim=2)
-    detections = torch.cat([bboxes, rot, scores, clses], dim=2)
+    detections = torch.cat([bboxes, scores, clses], dim=2)
+
     return detections
-
-
-def _get_rot_box(xs, ys, w_h_, rot):
-    direction = []
-    
-    for angle in rot[0]:
-        cos, sin = math.cos(angle), math.sin(angle)
-        direction.append([cos, sin, -sin, cos])
-    direction = torch.tensor(direction).clone().detach().cuda()
-
-    x0 = xs.squeeze(-1) + w_h_[:,:,1] * direction[:, 2] / 2 + w_h_[:,:,0] * direction[:, 0] / 2
-    y0 = ys.squeeze(-1) + w_h_[:,:,1] * direction[:, 3] / 2 + w_h_[:,:,0] * direction[:, 1] / 2
-    x1 = x0 - w_h_[:,:,0] * direction[:, 0]
-    y1 = y0 - w_h_[:,:,0] * direction[:, 1]
-    x2 = x1 - w_h_[:,:,1] * direction[:, 2]
-    y2 = y1 - w_h_[:,:,1] * direction[:, 3]
-    x3 = x0 - w_h_[:,:,1] * direction[:, 2]
-    y3 = y0 - w_h_[:,:,1] * direction[:, 3]
-    
-    return torch.stack([x0, y0, x1, y1, x2, y2, x3, y3], dim=2)
 
 
 def _nms(heat, kernel=3):
@@ -711,7 +686,6 @@ def _tranpose_and_gather_feature(feat, ind):
 
 def _topk(scores, K=100):
     batch, cat, height, width = scores.size()
-
     topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
 
     topk_inds = topk_inds % (height * width)
@@ -764,9 +738,9 @@ def ctdet_post_process(dets, c, s, h, w, num_classes):
     for i in range(dets.shape[0]):
         top_preds = {}
         dets[i, :, :2] = transform_preds(
-            dets[i, :, 0:2], c[i], s[i], (w, h))
+            dets[i, :, 0:2], c[i], s[i], (h, w))
         dets[i, :, 2:4] = transform_preds(
-            dets[i, :, 2:4], c[i], s[i], (w, h))
+            dets[i, :, 2:4], c[i], s[i], (h, w))
         # dets[i, :, 4:6] = transform_preds(
         #     dets[i, :, 4:6], c[i], s[i], (w, h))
         # dets[i, :, 6:8] = transform_preds(
@@ -799,7 +773,6 @@ def merge_outputs(detections, num_classes, num_keep):
             [detection[j] for detection in detections], axis=0).astype(np.float32)
 
         # results[j] = soft_nms(results[j], Nt=0.5, method=2, threshold=0.01)
-
     scores = np.hstack([results[j][:, 5] for j in range(1, num_classes + 1)])
 
     if len(scores) > max_per_image:

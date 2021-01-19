@@ -25,8 +25,8 @@ model = dict(
         anchor_generator=dict(
             type='AnchorGenerator',
             scales=[8],
-            # ratios=[0.5, 1.0, 2.0],
-            ratios=[0.3, 0.62, 0.94, 1.55, 2.39],
+            ratios=[0.5, 1.0, 2.0],
+            # ratios=[0.3, 0.62, 0.94, 1.55, 2.39],
             strides=[4, 8, 16, 32, 64]),
         bbox_coder=dict(
             type='DeltaXYWHBBoxCoder',
@@ -61,7 +61,7 @@ train_cfg = dict(
     rpn=dict(
         assigner=dict(
             type='MaxIoUAssigner',
-            pos_iou_thr=0.7,
+            pos_iou_thr=0.5,
             neg_iou_thr=0.3,
             min_pos_iou=0.3,
             match_low_quality=True,
@@ -172,20 +172,25 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 #     warmup_ratio=1.0 / 3,
 #     step=[24, 40])
 
+lr_config = dict(
+    policy='CosineAnnealing',
+    warmup='linear',
+    warmup_iters=1000,
+    warmup_ratio=1.0 / 10,
+    min_lr_ratio=1e-5)
+
+# lr_config = dict(policy='poly', power=0.9, min_lr=1e-4, by_epoch=False)
+
 # lr_config = dict(
-#     policy='CosineAnnealing',
+#     policy='Cyclic',
 #     warmup='linear',
 #     warmup_iters=1000,
-#     warmup_ratio=1.0 / 10,
-#     min_lr_ratio=1e-5)
-
-lr_config = dict(policy='poly', power=0.9, min_lr=1e-4, by_epoch=False)
-
+#     warmup_ratio=1.0 / 10)
 
 checkpoint_config = dict(interval=5)
 # yapf:disable
 log_config = dict(
-    interval=1,
+    interval=10,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='TensorboardLoggerHook')
@@ -195,7 +200,7 @@ log_config = dict(
 total_epochs = 55
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/jsxs/faster_rcnn_r50_0115_maggie'
+work_dir = './work_dirs/jsxs/faster_rcnn_r50_210119_maggie'
 # load_from = './work_dirs/jsxs/faster_rcnn_r50_0113_stage2/latest.pth'
 load_from = None
 resume_from = None
