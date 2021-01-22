@@ -83,14 +83,14 @@ class CenterNet(SingleStageDetector):
         # Draw heatmap
         # import cv2 as cv
         # for i in range(16):
-        #     heatmap = outs[0][3][0][i] * 10
+        #     heatmap = (outs[0][0][0][i] + 1.5)* 10
         #     heatmap = heatmap.cpu().numpy().astype(np.uint8)
         #     heatmap = cv.applyColorMap(heatmap, cv.COLORMAP_HOT)
         #     # heatmap = cv.applyColorMap(heatmap, cv.COLORMAP_HOT)
         #     cv.imwrite('heatmap_{}.jpg'.format(i), heatmap)
         # import pdb; pdb.set_trace()
+
         bbox_list = self.bbox_head.get_bboxes(*outs, img_metas, rescale=rescale)
-        
         return bbox_list
 
     def forward_dummy(self, img):
@@ -221,7 +221,7 @@ class CenterNet(SingleStageDetector):
         y3 = y0 - w_h_[:,1] * direction[:, 3]
         
         return np.stack([x0, y0, x1, y1, x2, y2, x3, y3], axis=1).astype(int)
-            #     # Draw heatmap
+            #     # Draw heatmapa
         #     # heatmap = output[0][0][i] * 10
         #     # heatmap = heatmap.cpu().numpy().astype(np.uint8)
         #     # heatmap = cv.applyColorMap(heatmap, cv.COLORMAP_HOT)

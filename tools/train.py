@@ -183,7 +183,7 @@ def main():
         timestamp=timestamp,
         meta=meta)
 
-    torch.autograd.detect_anomaly(True) #maggie
+    # torch.autograd.detect_anomaly(True) #maggie
 
 if __name__ == '__main__':
     main()

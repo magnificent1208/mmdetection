@@ -48,7 +48,7 @@ class JSXSDataset(XMLDataset):
             if name != 'jsxs':
                 continue
             label = self.cat2label[name]
-            difficult = int(obj.find('difficult').text)
+            # difficult = int(obj.find('difficult').text)
             bnd_box = obj.find('bndbox')
             bbox = [
                 int(bnd_box.find('xmin').text),

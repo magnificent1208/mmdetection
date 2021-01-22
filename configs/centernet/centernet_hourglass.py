@@ -1,50 +1,26 @@
 model = dict(
     type='CenterNet',
-    pretrained='open-mmlab://msra/hrnetv2_w32',    
     backbone=dict(
-        type='HRNet',
-        extra=dict(
-            stage1=dict(
-                num_modules=1,
-                num_branches=1,
-                block='BOTTLENECK',
-                num_blocks=(4, ),
-                num_channels=(64, )),
-            stage2=dict(
-                num_modules=1,
-                num_branches=2,
-                block='BASIC',
-                num_blocks=(4, 4),
-                num_channels=(32, 64)),
-            stage3=dict(
-                num_modules=4,
-                num_branches=3,
-                block='BASIC',
-                num_blocks=(4, 4, 4),
-                num_channels=(32, 64, 128)),
-            stage4=dict(
-                num_modules=3,
-                num_branches=4,
-                block='BASIC',
-                num_blocks=(4, 4, 4, 4),
-                num_channels=(32, 64, 128, 256)))),
-    neck=dict(
-        type='HRFPN',
-        in_channels=[32, 64, 128, 256],
-        out_channels=256),
+        type='HourglassNet',
+        downsample_times=5,
+        num_stacks=2,
+        stage_channels=(256, 256, 384, 384, 384, 512),
+        stage_blocks=(2, 2, 2, 2, 2, 4),
+        feat_channel=256,
+        norm_cfg=dict(type='BN', requires_grad=True)),
+    neck=None,
     bbox_head=dict(
         type='CenterHead',
         num_classes=16,
         in_channels=256,
-        stacked_convs=1,
+        stacked_convs=2,
         feat_channels=256,
-        #strides=[8, 16, 32, 64, 128],
-        strides=[4, 8, 16, 32, 64],
-        regress_ranges=((-1, 32),(32, 64), (64, 128), (128, 256), (256, 1e8)),
+        strides=[4, 4],
+        regress_ranges=((-1, 64),(64, 1e8)),
         loss_hm=dict(type='CenterFocalLoss'),
-        loss_wh=dict(type="SmoothL1Loss",loss_weight=1),
+        loss_wh=dict(type="SmoothL1Loss",loss_weight=0.5),
         loss_offset=dict(type="SmoothL1Loss",loss_weight=0.5),
-        loss_rot=dict(type='SmoothL1Loss',loss_weight=0.5),
+        loss_rot=dict(type='SmoothL1Loss',loss_weight=2),
         K=100)
 )
 # training and testing settings
@@ -76,11 +52,11 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(800, 800), keep_ratio=True, is_rot=True),
+    dict(type='Resize', img_scale=(768, 768), keep_ratio=True, is_rot=True),
     # dict(type='Resize', img_scale=(1000, 1000), keep_ratio=True, is_rot=True),
     # dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
-    dict(type='Pad', size_divisor=32),
+    dict(type='Pad', size_divisor=128),
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', 
          keys=['img', 'gt_bboxes', 'gt_labels'],
@@ -91,7 +67,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(800, 800),
+        img_scale=(768, 768),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True, is_rot=True),
@@ -104,7 +80,7 @@ test_pipeline = [
 ]
 data = dict(
     samples_per_gpu=8,
-    workers_per_gpu=4,
+    workers_per_gpu=8,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'train/ImageSets/Main/train.txt',
@@ -120,8 +96,8 @@ data = dict(
         ann_file=data_root + 'train/ImageSets/Main/test.txt',
         img_prefix=data_root + 'train/',
         pipeline=test_pipeline))
-evaluation = dict(interval=5, metric='mAP')
-optimizer = dict(type='SGD', lr=5e-3, momentum=0.9, weight_decay=0.0001)
+evaluation = dict(interval=5, metric='mAP', iou_thr=0.55)
+optimizer = dict(type='SGD', lr=5e-4, momentum=0.9, weight_decay=0.0001)
 # optimizer = dict(type='Adam', lr=1e-3, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
@@ -150,8 +126,8 @@ log_config = dict(
 # yapf:enable
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/dota/centernet_hrnet_0122'
+work_dir = './work_dirs/dota/centernet_hourglass_0120'
 load_from = None
-resume_from = None
+resume_from = './work_dirs/dota/centernet_hourglass_0120/latest.pth'
 workflow = [('train', 1)]
 find_unused_parameters=True

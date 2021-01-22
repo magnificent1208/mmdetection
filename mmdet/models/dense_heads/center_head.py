@@ -44,7 +44,7 @@ class CenterHead(nn.Module):
                      type='SmoothL1Loss',
                      loss_weight=1),
                  conv_cfg=None,
-                 norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
+                 norm_cfg=dict(type='BN', requires_grad=True),
                  K=100,
                  **kwargs):
         super(CenterHead, self).__init__()
@@ -314,6 +314,7 @@ class CenterHead(nn.Module):
         return points
 
     def center_target(self, gt_bboxes_list, gt_labels_list, img_metas, all_level_points):
+        # import pdb; pdb.set_trace()
 
         assert len(self.featmap_sizes) == len(self.regress_ranges)
 
@@ -625,6 +626,7 @@ def get_3rd_point(a, b):
 
 def ctdet_decode_rot(hmap, regs, w_h_, rot, K=100):
     batch, cat, height, width = hmap.shape
+    # TODO: if necessary
     hmap = torch.sigmoid(hmap)
     # if flip test
     if batch > 1:
@@ -632,21 +634,22 @@ def ctdet_decode_rot(hmap, regs, w_h_, rot, K=100):
         w_h_ = (w_h_[0:1] + flip_tensor(w_h_[1:2])) / 2
         regs = regs[0:1]
         rot = rot[0:1]
-
     batch = 1
 
     hmap = _nms(hmap)  # perform nms on heatmaps
-
     scores, inds, clses, ys, xs = _topk(hmap, K=K)
+
     regs = _tranpose_and_gather_feature(regs, inds)
     regs = regs.view(batch, K, 2)
+
     xs = xs.view(batch, K, 1) + regs[:, :, 0:1]
     ys = ys.view(batch, K, 1) + regs[:, :, 1:2]
-    rot = _tranpose_and_gather_feature(rot, inds)
-    rot = rot.view(batch, K, 1)
         
     w_h_ = _tranpose_and_gather_feature(w_h_, inds)
     w_h_ = w_h_.view(batch, K, 2)
+
+    rot = _tranpose_and_gather_feature(rot, inds)
+    rot = rot.view(batch, K, 1)    
 
     clses = clses.view(batch, K, 1).float()
     scores = scores.view(batch, K, 1)
@@ -717,7 +720,8 @@ def post_process(dets, c, s, out_height, out_width, scale, num_classes):
         [type]: [description]
     """
     dets = dets.detach().cpu().numpy()
-    dets = dets.reshape(1, -1, dets.shape[2]) # (batch, K, 10)
+    dets = dets.reshape(1, -1, dets.shape[2])
+    print(dets.shape)
 
     dets = ctdet_post_process(
         dets.copy(), [c], [s],

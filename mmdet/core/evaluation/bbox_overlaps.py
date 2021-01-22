@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import math
 
 
 def bbox_overlaps(bboxes1, bboxes2, mode='iou', eps=1e-6):
@@ -49,14 +50,16 @@ def bbox_overlaps(bboxes1, bboxes2, mode='iou', eps=1e-6):
     return ious
 
 
-def iou_rotate_calculate(boxes1, boxes2):
+def iou_rotate_calculate(boxes1, boxes2, rad=True):
     """Calculate iou for a pair of rot box.(Matrix not support)
     """
-    #TODO: Support for Matrix.
-    import pdb; pdb.set_trace()
     area1 = boxes1[:, 2] * boxes1[:, 3]
     area2 = boxes2[:, 2] * boxes2[:, 3]
     ious = np.zeros([boxes1.shape[0], boxes2.shape[0]])
+
+    if rad:
+        boxes1[:, 4] *= 180 / math.pi
+        boxes2[:, 4] *= 180 / math.pi
 
     for i in range(len(boxes1)):
         r1 = ((boxes1[i, 0], boxes1[i, 1]), (boxes1[i, 2], boxes1[i, 3]), boxes1[i, 4])

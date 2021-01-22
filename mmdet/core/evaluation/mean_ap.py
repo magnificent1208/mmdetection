@@ -402,7 +402,7 @@ def eval_map(det_results,
     num_classes = len(det_results[0])  # positive class num
     area_ranges = ([(rg[0]**2, rg[1]**2) for rg in scale_ranges]
                    if scale_ranges is not None else None)
-
+    
     pool = Pool(nproc)
     eval_results = []
     for i in range(num_classes):
@@ -441,7 +441,7 @@ def eval_map(det_results,
                     num_gts[k] += np.sum((gt_areas >= min_area)
                                          & (gt_areas < max_area))
         # sort all det bboxes by score, also sort tp and fp
-        # import pdb; pdb.set_trace()
+        
         cls_dets = np.vstack(cls_dets)
         num_dets = cls_dets.shape[0]
         sort_inds = np.argsort(-cls_dets[:, -1])

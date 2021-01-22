@@ -236,7 +236,6 @@ class DotaDataset(XMLDataset):
         eval_results = {}
         if metric == 'mAP':
             assert isinstance(iou_thr, float)
-            import pdb; pdb.set_trace()
             mean_ap, _ = eval_map(
                 results,
                 annotations,
