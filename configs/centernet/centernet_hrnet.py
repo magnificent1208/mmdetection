@@ -42,9 +42,9 @@ model = dict(
         strides=[4, 8, 16, 32, 64],
         regress_ranges=((-1, 32),(32, 64), (64, 128), (128, 256), (256, 1e8)),
         loss_hm=dict(type='CenterFocalLoss'),
-        loss_wh=dict(type="SmoothL1Loss",loss_weight=1),
+        loss_wh=dict(type="SmoothL1Loss",loss_weight=2),
         loss_offset=dict(type="SmoothL1Loss",loss_weight=0.5),
-        loss_rot=dict(type='SmoothL1Loss',loss_weight=0.5),
+        loss_rot=dict(type='SmoothL1Loss',loss_weight=20),
         K=100)
 )
 # training and testing settings
@@ -121,7 +121,7 @@ data = dict(
         img_prefix=data_root + 'train/',
         pipeline=test_pipeline))
 evaluation = dict(interval=5, metric='mAP')
-optimizer = dict(type='SGD', lr=5e-3, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=1e-5, momentum=0.9, weight_decay=0.0001)
 # optimizer = dict(type='Adam', lr=1e-3, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
@@ -150,8 +150,8 @@ log_config = dict(
 # yapf:enable
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/dota/centernet_hrnet_0122'
-load_from = None
+work_dir = './work_dirs/dota/centernet_hrnet_stage3_0126'
+load_from = './work_dirs/dota/centernet_hrnet_stage2_0125/latest.pth'
 resume_from = None
 workflow = [('train', 1)]
 find_unused_parameters=True

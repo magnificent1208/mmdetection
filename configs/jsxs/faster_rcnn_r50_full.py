@@ -202,6 +202,6 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/jsxs/faster_rcnn_r50_210119_maggie'
 # load_from = './work_dirs/jsxs/faster_rcnn_r50_0113_stage2/latest.pth'
-load_from = None
+load_from = './ckpts/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'
 resume_from = None
 workflow = [('train', 1)]

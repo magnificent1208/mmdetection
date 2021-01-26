@@ -626,8 +626,6 @@ def get_3rd_point(a, b):
 
 def ctdet_decode_rot(hmap, regs, w_h_, rot, K=100):
     batch, cat, height, width = hmap.shape
-    # TODO: if necessary
-    hmap = torch.sigmoid(hmap)
     # if flip test
     if batch > 1:
         hmap = (hmap[0:1] + flip_tensor(hmap[1:2])) / 2
@@ -721,7 +719,6 @@ def post_process(dets, c, s, out_height, out_width, scale, num_classes):
     """
     dets = dets.detach().cpu().numpy()
     dets = dets.reshape(1, -1, dets.shape[2])
-    print(dets.shape)
 
     dets = ctdet_post_process(
         dets.copy(), [c], [s],

@@ -178,9 +178,9 @@ test_cfg = dict(
         score_thr=0.05, nms=dict(type='nms', iou_threshold=0.5), max_per_img=100))
 # dataset settings
 dataset_type = 'JSXSDataset'
-data_root = 'data/jsxs/'
+data_root = 'data/jsxs-full/'
 img_norm_cfg = dict(    
-    mean=[119.0 , 126.6, 126.2], std=[58.395, 57.12, 57.375], to_rgb=True)
+    mean=[130.21, 131.26, 130.08], std=[22.79, 21.44, 24.45], to_rgb=True)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
@@ -248,7 +248,7 @@ log_config = dict(
 total_epochs = 40
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/jsxs/cascade_rcnn_0112'
-load_from = None
+work_dir = './work_dirs/jsxs/cascade_rcnn_0125'
+load_from = './ckpts/cascade_rcnn_r50_fpn_1x_coco_20200316-3dc56deb.pth'
 resume_from = None
 workflow = [('train', 1)]

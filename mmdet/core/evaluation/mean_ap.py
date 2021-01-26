@@ -1,4 +1,5 @@
 from multiprocessing import Pool
+import pdb
 
 import mmcv
 import numpy as np
@@ -287,7 +288,6 @@ def tpfp_rot(det_bboxes,
                 fp[i, (det_areas >= min_area) & (det_areas < max_area)] = 1
         return tp, fp
 
-    # import pdb; pdb.set_trace()
     ious = iou_rotate_calculate(det_bboxes, gt_bboxes)
     # for each det, the max iou with all gts
     ious_max = ious.max(axis=1)
@@ -422,6 +422,7 @@ def eval_map(det_results,
                 f'tpfp_fn has to be a function or None, but got {tpfp_fn}')
         # compute tp and fp for each image with multiple processes
         # FIXME: support multiprocessing
+        # import pdb; pdb.set_trace()
         tpfp = pool.starmap(
             tpfp_fn,
             zip(cls_dets, cls_gts, cls_gts_ignore,
