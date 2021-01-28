@@ -60,12 +60,7 @@ train_cfg = dict(
     debug=False,
 )
 test_cfg = dict(
-    a = 5
-    #nms_pre=1000,
-    #min_bbox_size=0,
-    #score_thr=0.05,
-    #nms=dict(type='nms', iou_thr=0.5),
-    #max_per_img=100
+    score_thr=0.05
 )
 # Dataset config
 dataset_type = 'DotaDataset'
@@ -120,7 +115,7 @@ data = dict(
         ann_file=data_root + 'train/ImageSets/Main/test.txt',
         img_prefix=data_root + 'train/',
         pipeline=test_pipeline))
-evaluation = dict(interval=5, metric='mAP')
+evaluation = dict(interval=5, metric='mAP',)
 optimizer = dict(type='SGD', lr=1e-5, momentum=0.9, weight_decay=0.0001)
 # optimizer = dict(type='Adam', lr=1e-3, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)

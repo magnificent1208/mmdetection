@@ -174,19 +174,20 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 #     warmup_ratio=1.0 / 3,
 #     step=[24, 40])
 
-# lr_config = dict(
-#     policy='CosineAnnealing',
-#     warmup='linear',
-#     warmup_iters=200,
-#     warmup_ratio=1.0 / 3,
-#     min_lr_ratio=1e-5)
-
 lr_config = dict(
-    policy='Cyclic',
+    policy='CosineAnnealing',
     warmup='linear',
     warmup_iters=200,
-    warmup_ratio=1.0 / 3)
+    warmup_ratio=1.0 / 3,
+    min_lr_ratio=1e-5)
+
+# lr_config = dict(
+#     policy='Cyclic',
+#     warmup='linear',
+#     warmup_iters=100,
+#     warmup_ratio=1.0 / 3)
 checkpoint_config = dict(interval=5)
+
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -196,11 +197,11 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 30
+total_epochs = 50
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/jsxs/faster_rcnn_r50_210125_maggie1'
-load_from = './work_dirs/jsxs/faster_rcnn_r50_210125_maggie/epoch_20_ap_0.215.pth'
+work_dir = './work_dirs/jsxs/faster_rcnn_r50_210128_maggie'
+load_from = './work_dirs/jsxs/faster_rcnn_r50_210127_maggie/epoch_25-mAP-0.268.pth'
 # load_from = None
 resume_from = None
 workflow = [('train', 1)]

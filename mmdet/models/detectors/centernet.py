@@ -21,6 +21,8 @@ class CenterNet(SingleStageDetector):
                  pretrained=None):
         super(CenterNet, self).__init__(backbone, neck, bbox_head, train_cfg,
                                         test_cfg, pretrained)
+
+        self.score_thr = test_cfg['score_thr'] if 'score_thr' in test_cfg else 0.2
     
     def forward_train(self,
                       img,
@@ -77,6 +79,8 @@ class CenterNet(SingleStageDetector):
         rescale : bool, optional
             Wheter to recale the results, by default False
         """
+        # hrnet:{0.02: 16.8, 0.05: 20.0, 0.1: 19.4, 0.15:19.3, 0.2: 17.9}  
+        # hourglass:{0.5: 11.1, 0.3: 20.5, 0.25: 21.1, 0.2: 19.8, 0.15:16.6, 0.1: 11.1}
         x = self.extract_feat(img)
         outs = self.bbox_head(x)
 
@@ -91,6 +95,20 @@ class CenterNet(SingleStageDetector):
         # import pdb; pdb.set_trace()
 
         bbox_list = self.bbox_head.get_bboxes(*outs, img_metas, rescale=rescale)
+        
+        for i in range(len(bbox_list)):
+            for j in range(len(bbox_list[i])):
+                cur_list = bbox_list[i][j]
+                new_list = []
+
+                for box in cur_list:
+                    if box[5] > self.score_thr:
+                        new_list.append(box)
+                if new_list:
+                    bbox_list[i][j] = np.array(new_list)
+                else:
+                    bbox_list[i][j] = np.empty([0,7])
+
         return bbox_list
 
     def forward_dummy(self, img):

@@ -17,7 +17,7 @@ imgs = ['P1446_1600_1046.png', 'P1139_4800_3200.png', 'P0122_490_556.png', 'P255
 # imgs = ['P1413_2889_2400.png']
 
 img_dir = './data/dota/train/JPEGImages/'
-work_dir_path = 'centernet_hrnet_stage2_0125'
+work_dir_path = 'centernet_hrnet_stage3_0126'
 dataset = 'dota'
 
 # imgs = ['test1.jpg', 'test2.jpg', 'test3.jpg', 'test4.jpg', 'test5.jpg', 'test6.jpg', 'test7.jpg', 'test8.jpg']
@@ -27,7 +27,6 @@ dataset = 'dota'
 
 device = 'cuda'
 thr = 0.5
-
 
 def find_py(dir_path):
     file_names = os.listdir(dir_path)
