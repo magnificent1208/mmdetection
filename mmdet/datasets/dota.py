@@ -249,7 +249,6 @@ class DotaDataset(XMLDataset):
             gt_bboxes = [ann['bboxes'] for ann in annotations]
             if isinstance(iou_thr, float):
                 iou_thr = [iou_thr]
-            #TODO: update recall for rot-dataset
             recalls = eval_recalls(
                 gt_bboxes, results, proposal_nums, iou_thr, logger=logger)
             for i, num in enumerate(proposal_nums):

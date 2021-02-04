@@ -25,8 +25,8 @@ model = dict(
         anchor_generator=dict(
             type='AnchorGenerator',
             scales=[8],
-            # ratios=[0.5, 1.0, 2.0], #FasterRcnn原ratio
-            ratios=[0.3, 0.62, 0.94, 1.55, 2.39], #jsxs计算出的ratio
+            ratios=[0.5, 1.0, 2.0], #FasterRcnn原ratio
+            # ratios=[0.3, 0.62, 0.94, 1.55, 2.39], #jsxs计算出的ratio
             strides=[4, 8, 16, 32, 64]),
         bbox_coder=dict(
             type='DeltaXYWHBBoxCoder',
@@ -47,7 +47,7 @@ model = dict(
             in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
-            num_classes=1,
+            num_classes=5,
             bbox_coder=dict(
                 type='DeltaXYWHBBoxCoder',
                 target_means=[0., 0., 0., 0.],
@@ -112,14 +112,14 @@ test_cfg = dict(
     # e.g., nms=dict(type='soft_nms', iou_thr=0.5, min_score=0.05)
 )
 # dataset settings
-dataset_type = 'JSXSDataset'
-data_root = 'data/jsxs/'
+dataset_type = 'BJDataset'
+data_root = 'data/bj/'
 img_norm_cfg = dict(
-    mean=[130.21, 131.26, 130.08], std=[22.79, 21.44, 24.45], to_rgb=True)
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1000, 1000), keep_ratio=True),
+    dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -130,7 +130,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1000, 1000),
+        img_scale=(1333, 800),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -143,7 +143,7 @@ test_pipeline = [
 ]
 data = dict(
     samples_per_gpu=16,
-    workers_per_gpu=4,
+    workers_per_gpu=8,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'ImageSets/Main/train.txt',
@@ -163,8 +163,8 @@ evaluation = dict(interval=5, metric='mAP')
 # optimizer
 #optimizer = dict(type='SGD', lr=0, momentum=0.9, weight_decay=0.0001)
 # optimizer = dict(type='Adam', lr=0.0003, weight_decay=0.0001)
-# optimizer = dict(type='Adam', lr=0.001, weight_decay=0.0001)
-optimizer = dict(type='Adam', lr=0.0001, weight_decay=0.00005)
+optimizer = dict(type='Adam', lr=0.001, weight_decay=0.0001)
+# optimizer = dict(type='Adam', lr=0.001, weight_decay=0.00005)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 # lr_config = dict(
@@ -190,7 +190,7 @@ checkpoint_config = dict(interval=5)
 
 # yapf:disable
 log_config = dict(
-    interval=50,
+    interval=10,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='TensorboardLoggerHook')
@@ -200,8 +200,7 @@ log_config = dict(
 total_epochs = 50
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/jsxs/faster_rcnn_r50_210128_maggie'
-load_from = './work_dirs/jsxs/faster_rcnn_r50_210127_maggie/epoch_25-mAP-0.268.pth'
-# load_from = None
+work_dir = './work_dirs/bj/faster_rcnn_512'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]

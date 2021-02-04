@@ -21,7 +21,9 @@ class CenterNet(SingleStageDetector):
                  pretrained=None):
         super(CenterNet, self).__init__(backbone, neck, bbox_head, train_cfg,
                                         test_cfg, pretrained)
-
+        
+        if neck == None:
+            self.neck = neck
         self.score_thr = test_cfg['score_thr'] if 'score_thr' in test_cfg else 0.2
     
     def forward_train(self,

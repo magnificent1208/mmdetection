@@ -20,7 +20,7 @@ model = dict(
         loss_hm=dict(type='CenterFocalLoss'),
         loss_wh=dict(type="SmoothL1Loss",loss_weight=0.5),
         loss_offset=dict(type="SmoothL1Loss",loss_weight=0.5),
-        loss_rot=dict(type='SmoothL1Loss',loss_weight=2),
+        loss_rot=dict(type='SmoothL1Loss',loss_weight=5),
         K=100)
 )
 # training and testing settings
@@ -36,12 +36,7 @@ train_cfg = dict(
     debug=False,
 )
 test_cfg = dict(
-    a = 5
-    #nms_pre=1000,
-    #min_bbox_size=0,
-    #score_thr=0.05,
-    #nms=dict(type='nms', iou_thr=0.5),
-    #max_per_img=100
+    score_thr=0.2,
 )
 # Dataset config
 dataset_type = 'DotaDataset'
@@ -96,8 +91,8 @@ data = dict(
         ann_file=data_root + 'train/ImageSets/Main/test.txt',
         img_prefix=data_root + 'train/',
         pipeline=test_pipeline))
-evaluation = dict(interval=5, metric='mAP', iou_thr=0.55)
-optimizer = dict(type='SGD', lr=5e-4, momentum=0.9, weight_decay=0.0001)
+evaluation = dict(interval=5, metric='mAP')
+optimizer = dict(type='SGD', lr=5e-5, momentum=0.9, weight_decay=0.0001)
 # optimizer = dict(type='Adam', lr=1e-3, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
@@ -106,14 +101,14 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=0.001,
-    step=[40, 60])
+    step=[20, 32])
 # lr_config = dict(
 #     policy='CosineAnnealing',
 #     warmup='linear',
 #     warmup_iters=500,
 #     warmup_ratio=1.0 / 10,
 #     min_lr_ratio=1e-5)
-total_epochs = 70
+total_epochs = 40
 # Runtime Setting
 checkpoint_config = dict(interval=10)
 # yapf:disable
@@ -126,8 +121,8 @@ log_config = dict(
 # yapf:enable
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/dota/centernet_hourglass_0120'
-load_from = None
-resume_from = './work_dirs/dota/centernet_hourglass_0120/latest.pth'
+work_dir = './work_dirs/dota/centernet_hourglass_stage2_0128'
+load_from = './work_dirs/dota/centernet_hourglass_0120/latest.pth'
+resume_from = None
 workflow = [('train', 1)]
 find_unused_parameters=True

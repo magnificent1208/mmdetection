@@ -42,9 +42,9 @@ model = dict(
         strides=[4, 8, 16, 32, 64],
         regress_ranges=((-1, 32),(32, 64), (64, 128), (128, 256), (256, 1e8)),
         loss_hm=dict(type='CenterFocalLoss'),
-        loss_wh=dict(type="SmoothL1Loss",loss_weight=2),
+        loss_wh=dict(type="SmoothL1Loss",loss_weight=1),
         loss_offset=dict(type="SmoothL1Loss",loss_weight=0.5),
-        loss_rot=dict(type='SmoothL1Loss',loss_weight=20),
+        loss_rot=dict(type='SmoothL1Loss',loss_weight=0.5),
         K=100)
 )
 # training and testing settings
@@ -60,7 +60,7 @@ train_cfg = dict(
     debug=False,
 )
 test_cfg = dict(
-    score_thr=0.05
+    score_thr=0.25
 )
 # Dataset config
 dataset_type = 'DotaDataset'
@@ -71,7 +71,7 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(800, 800), keep_ratio=True, is_rot=True),
+    dict(type='Resize', img_scale=(1024, 1024), keep_ratio=True, is_rot=True),
     # dict(type='Resize', img_scale=(1000, 1000), keep_ratio=True, is_rot=True),
     # dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
@@ -86,7 +86,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(800, 800),
+        img_scale=(1024, 1024),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True, is_rot=True),
@@ -98,8 +98,8 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=8,
-    workers_per_gpu=4,
+    samples_per_gpu=6,
+    workers_per_gpu=3,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'train/ImageSets/Main/train.txt',
@@ -116,7 +116,7 @@ data = dict(
         img_prefix=data_root + 'train/',
         pipeline=test_pipeline))
 evaluation = dict(interval=5, metric='mAP',)
-optimizer = dict(type='SGD', lr=1e-5, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=1e-4, momentum=0.9, weight_decay=0.0001)
 # optimizer = dict(type='Adam', lr=1e-3, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=None)
 # learning policy
@@ -145,8 +145,8 @@ log_config = dict(
 # yapf:enable
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/dota/centernet_hrnet_stage3_0126'
-load_from = './work_dirs/dota/centernet_hrnet_stage2_0125/latest.pth'
+work_dir = './work_dirs/dota/centernet_hrnet_circle_0201'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]
 find_unused_parameters=True

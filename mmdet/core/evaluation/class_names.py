@@ -105,10 +105,12 @@ def tunnel_obj_classes():
         'xd', 'dlbg', 'box'
     ]
 
+
 def tunnel_rot_classes():
     return [
         'dljt'
     ]
+
 
 def sim311_classes():
     return [
@@ -116,14 +118,32 @@ def sim311_classes():
         'plastic', 'jyz_ps', 'ld', 'fzc_sh', 'nest', 'fzc_xs'
     ]
 
+
 def sim311_full_classes():
     return [
         'ljjj', 'nzxj', 'zjgb', 'xcxj', 'qxz', 'uxh', 'qdp', 'fzc', 'jyz', 
         'uxgj', 'plastic', 'jyz_ps', 'ld', 'fzc_sh', 'lszc', 'nest', 'fzc_xs'
     ]
 
+
 def jsxs_classes():
     return ['jsxs']
+
+
+def bj_classes():
+    return ['bj', 'bj_bpmh', 'bj_bpps', 'bj_wkps', 'bjdsyc']
+
+
+def byq_classes():
+    return ['byq_bt', 'byq_lqq', 'byq_tg', 'byq_yz', 'byq_jgx', 'byq_dzx', 'byq_hxq']
+
+
+def sbqs_classes():
+    return ['bj_bpmh', 'bj_bpps', 'bj_wkps', 'jyz_lw', 'jyz_ps', 'sly_bjbmyw', 'jsxs', 
+               'hxq_gjtps', 'xmbhyc', 'yw_gkxfw', 'yw_nc', 'mcqdmsh', 'gbps', 'gjptwss', 
+               'bmwh', 'yxcr', 'wcaqm', 'wcgz', 'xy', 'bjdsyc', 'hxq_gjbs', 
+               'kgg_ybh' ,'kgg_ybf']
+
 
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
@@ -136,7 +156,10 @@ dataset_aliases = {
     'tunnel_obj': ['tunnel_obj'], 
     'tunneo_rot': ['tunnel_rot'],
     'sim311': ['sim311', 'sim311_full'],
-    'jsxs': ['jsxs']
+    'jsxs': ['jsxs'],
+    'bj': ['bj'],
+    'byq': ['byq'],
+    'sbqs': ['sbqs']
 }
 
 

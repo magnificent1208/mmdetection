@@ -202,14 +202,14 @@ class CenterHead(nn.Module):
         flatten_wh_preds = torch.cat(flatten_wh_preds)
         flatten_offset_preds = torch.cat(flatten_offset_preds)
         flatten_rot_preds = torch.cat(flatten_rot_preds)
-       
+
         # targets
         flatten_heatmaps = torch.cat(heatmaps)
         flatten_wh_targets = torch.cat(wh_targets) # torch.Size([all_level_points, 2])
         flatten_offset_targets = torch.cat(offset_targets)
         flatten_rot_targets = torch.cat(rot_targets)
-        
-        # center_inds = flatten_heatmaps[..., 0].nonzero().reshape(-1) 
+        import pdb; pdb.set_trace()
+        # center_inds = flatten_heatmaps[...].nonzero()[:,0]
         center_inds = flatten_wh_targets[..., 0].nonzero().reshape(-1)
         num_center = len(center_inds)
 
@@ -236,9 +236,6 @@ class CenterHead(nn.Module):
             loss_wh = pos_wh_preds.sum()
             loss_offset = pos_offset_preds.sum()
             loss_rot = pos_rot_preds.sum()
-        
-        # if loss_wh > 1e5 or loss_offset > 1e5 or loss_rot >1e5:
-        #     loss_wh = loss_offset = loss_rot = torch.tensor([0]).cuda()
     
         return dict(
               loss_hm = loss_hm,

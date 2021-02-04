@@ -25,8 +25,8 @@ model = dict(
         anchor_generator=dict(
             type='AnchorGenerator',
             scales=[8],
-            ratios=[0.5, 1.0, 2.0],
-            # ratios=[0.3, 0.62, 0.94, 1.55, 2.39],
+            ratios=[0.5, 1.0, 2.0], #FasterRcnn原ratio
+            # ratios=[0.3, 0.62, 0.94, 1.55, 2.39], #jsxs计算出的ratio
             strides=[4, 8, 16, 32, 64]),
         bbox_coder=dict(
             type='DeltaXYWHBBoxCoder',
@@ -47,7 +47,7 @@ model = dict(
             in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
-            num_classes=1,
+            num_classes=23,
             bbox_coder=dict(
                 type='DeltaXYWHBBoxCoder',
                 target_means=[0., 0., 0., 0.],
@@ -112,14 +112,14 @@ test_cfg = dict(
     # e.g., nms=dict(type='soft_nms', iou_thr=0.5, min_score=0.05)
 )
 # dataset settings
-dataset_type = 'JSXSDataset'
-data_root = 'data/jsxs-full/'
+dataset_type = 'SBQSDataset'
+data_root = 'data/sbqs/'
 img_norm_cfg = dict(
-    mean=[130.21, 131.26, 130.08], std=[22.79, 21.44, 24.45], to_rgb=True)
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1000, 1000), keep_ratio=True),
+    dict(type='Resize', img_scale=(512, 512), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -130,7 +130,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1000, 1000),
+        img_scale=(512, 512),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -142,7 +142,7 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=32,
+    samples_per_gpu=16,
     workers_per_gpu=8,
     train=dict(
         type=dataset_type,
@@ -162,7 +162,9 @@ data = dict(
 evaluation = dict(interval=5, metric='mAP')
 # optimizer
 #optimizer = dict(type='SGD', lr=0, momentum=0.9, weight_decay=0.0001)
-optimizer = dict(type='Adam', lr=0.0003, weight_decay=0.0001)
+# optimizer = dict(type='Adam', lr=0.0003, weight_decay=0.0001)
+optimizer = dict(type='Adam', lr=0.001, weight_decay=0.0001)
+# optimizer = dict(type='Adam', lr=0.001, weight_decay=0.00005)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 # lr_config = dict(
@@ -175,19 +177,17 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(
     policy='CosineAnnealing',
     warmup='linear',
-    warmup_iters=1000,
-    warmup_ratio=1.0 / 10,
+    warmup_iters=200,
+    warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-5)
-
-# lr_config = dict(policy='poly', power=0.9, min_lr=1e-4, by_epoch=False)
 
 # lr_config = dict(
 #     policy='Cyclic',
 #     warmup='linear',
-#     warmup_iters=1000,
-#     warmup_ratio=1.0 / 10)
-
+#     warmup_iters=100,
+#     warmup_ratio=1.0 / 3)
 checkpoint_config = dict(interval=5)
+
 # yapf:disable
 log_config = dict(
     interval=10,
@@ -197,11 +197,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 55
+total_epochs = 50
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/jsxs/faster_rcnn_r50_210119_maggie'
-# load_from = './work_dirs/jsxs/faster_rcnn_r50_0113_stage2/latest.pth'
-load_from = './ckpts/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'
+work_dir = './work_dirs/sbqs/faster_rcnn_512'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]
