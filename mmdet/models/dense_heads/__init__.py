@@ -1,6 +1,7 @@
 from .anchor_free_head import AnchorFreeHead
 from .anchor_head import AnchorHead
 from .atss_head import ATSSHead
+from .cascade_rpn_head import CascadeRPNHead, StageCascadeRPNHead
 from .centripetal_head import CentripetalHead
 from .center_head import CenterHead
 from .corner_head import CornerHead
@@ -35,5 +36,5 @@ __all__ = [
     'PISARetinaHead', 'PISASSDHead', 'GFLHead', 'CornerHead', 'YOLACTHead',
     'YOLACTSegmHead', 'YOLACTProtonet', 'YOLOV3Head', 'PAAHead',
     'SABLRetinaHead', 'CentripetalHead', 'VFNetHead', 'TransformerHead',
-    'CenterHead'
+    'CenterHead', 'StageCascadeRPNHead', 'CascadeRPNHead'
 ]

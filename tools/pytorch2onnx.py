@@ -140,8 +140,6 @@ def parse_args():
     parser.add_argument(
         '--dataset', type=str, default='coco', help='Dataset name')
     parser.add_argument(
-        '--view', action='store_true', help='Visualize results')
-    parser.add_argument(
         '--verify',
         action='store_true',
         help='verify the onnx model output against pytorch output')
@@ -199,4 +197,5 @@ if __name__ == '__main__':
         output_file=args.output_file,
         verify=args.verify,
         normalize_cfg=normalize_cfg,
-        dataset=args.dataset)
+        dataset=args.dataset,
+        test_img=args.test_img)
