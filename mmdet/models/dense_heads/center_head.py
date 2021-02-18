@@ -208,7 +208,6 @@ class CenterHead(nn.Module):
         flatten_wh_targets = torch.cat(wh_targets) # torch.Size([all_level_points, 2])
         flatten_offset_targets = torch.cat(offset_targets)
         flatten_rot_targets = torch.cat(rot_targets)
-        import pdb; pdb.set_trace()
         # center_inds = flatten_heatmaps[...].nonzero()[:,0]
         center_inds = flatten_wh_targets[..., 0].nonzero().reshape(-1)
         num_center = len(center_inds)
@@ -311,7 +310,6 @@ class CenterHead(nn.Module):
         return points
 
     def center_target(self, gt_bboxes_list, gt_labels_list, img_metas, all_level_points):
-        # import pdb; pdb.set_trace()
 
         assert len(self.featmap_sizes) == len(self.regress_ranges)
 

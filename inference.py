@@ -16,7 +16,7 @@ imgs = ['P1446_1600_1046.png', 'P1139_4800_3200.png', 'P0122_490_556.png', 'P255
         'P0236_450_313.png', 'P0896_1438_800.png', 'P1413_2889_2400.png']
 
 img_dir = './data/dota/train/JPEGImages/'
-work_dir_path = 'centernet_hrnet_circle_0201'
+work_dir_path = 'centernet_hrnet_0204'
 dataset = 'dota'
 
 # imgs = ['test1.jpg', 'test2.jpg', 'test3.jpg', 'test4.jpg', 'test5.jpg', 'test6.jpg', 'test7.jpg', 'test8.jpg']
@@ -24,18 +24,18 @@ dataset = 'dota'
 # work_dir_path = 'faster_rcnn_r50_210119_maggie'
 # dataset = 'jsxs'
 
-imgs = ['000001.jpg', '003254.jpg', '009283.jpg', '007226.jpg', '001234.jpg', '002341.jpg', '008773.jpg', '014225.jpg', '017332.jpg']
+# imgs = ['000001.jpg', '003254.jpg', '009283.jpg', '007226.jpg', '001234.jpg', '002341.jpg', '008773.jpg', '014225.jpg', '017332.jpg']
 
 # img_dir = './data/bj/JPEGImages/'
 # work_dir_path = 'faster_rcnn_512'
 # dataset = 'bj'
 
-img_dir = './data/byq/JPEGImages/'
-work_dir_path = 'faster_rcnn_512'
-dataset = 'byq'
+# img_dir = './data/byq/JPEGImages/'
+# work_dir_path = 'faster_rcnn_512'
+# dataset = 'byq'
 
 device = 'cuda'
-thr = 0.5
+thr = 0.0
 
 def find_py(dir_path):
     file_names = os.listdir(dir_path)

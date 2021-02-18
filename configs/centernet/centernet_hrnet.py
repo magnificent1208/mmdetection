@@ -145,7 +145,7 @@ log_config = dict(
 # yapf:enable
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/dota/centernet_hrnet_circle_0201'
+work_dir = './work_dirs/dota/centernet_hrnet_0204'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]
