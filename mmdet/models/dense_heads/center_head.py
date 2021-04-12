@@ -15,6 +15,8 @@ from ..utils import gaussian_radius, gen_gaussian_target
 
 INF = 1e8
 
+import pdb
+
 
 @HEADS.register_module()
 class CenterHead(nn.Module):
@@ -134,12 +136,14 @@ class CenterHead(nn.Module):
         return multi_apply(self.forward_single, feats, self.scales)
 
     def forward_single(self, x, scale):
+        pdb.set_trace()
         cls_feat = x
         wh_feat = x
         offset_feat = x
         rot_feat = x
 
         for cls_layer in self.cls_convs:
+            # pdb.set_trace()
             cls_feat = cls_layer(cls_feat)
         cls_score = self.center_hm(cls_feat)
 
@@ -534,6 +538,7 @@ class CenterHead(nn.Module):
             detections.append(dets)
 
         results = merge_outputs(detections, self.num_classes, self.K) # 单张图的结果
+        import pdb; pdb.set_trace()
         return results
 
 

@@ -26,11 +26,14 @@ from .vfnet import VFNet
 from .yolact import YOLACT
 from .yolo import YOLOV3
 from .centernet import CenterNet
+from .ttfnet import TTFNet
+from .rot_ttfnet import RTTFNet
 
 __all__ = [
     'ATSS', 'BaseDetector', 'SingleStageDetector', 'TwoStageDetector', 'RPN',
     'FastRCNN', 'FasterRCNN', 'MaskRCNN', 'CascadeRCNN', 'HybridTaskCascade',
     'RetinaNet', 'FCOS', 'GridRCNN', 'MaskScoringRCNN', 'RepPointsDetector',
     'FOVEA', 'FSAF', 'NASFCOS', 'PointRend', 'GFL', 'CornerNet', 'PAA',
-    'YOLOV3', 'YOLACT', 'VFNet', 'DETR', 'CenterNet', 'TridentFasterRCNN'
+    'YOLOV3', 'YOLACT', 'VFNet', 'DETR', 'CenterNet', 'TridentFasterRCNN',
+    'TTFNet', 'RTTFNet'
 ]

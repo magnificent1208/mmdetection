@@ -20,6 +20,7 @@ from .xml_style import XMLDataset
 from utils.image import get_border, get_affine_transform, affine_transform, color_aug
 from utils.image import draw_umich_gaussian, gaussian_radius
 
+import pdb
 
 @DATASETS.register_module()
 class DotaDataset(XMLDataset):
@@ -130,9 +131,10 @@ class DotaDataset(XMLDataset):
             labels_ignore = np.array(labels_ignore)
         
         n_bboxes = []
-
         for i in range(bboxes.shape[0]):
+
             bbox = bboxes[i, :]
+
             cx = (bbox[0] + bbox[2] + bbox[4] + bbox[6]) / 4
             cy = (bbox[1] + bbox[3] + bbox[5] + bbox[7]) / 4
             w = math.sqrt(math.pow((bbox[0] - bbox[2]), 2) + math.pow((bbox[1] - bbox[3]), 2))

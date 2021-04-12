@@ -15,6 +15,8 @@ from mmdet.core import eval_recalls
 from .builder import DATASETS
 from .custom import CustomDataset
 
+import pdb
+
 try:
     import pycocotools
     if not hasattr(pycocotools, '__sphinx_mock__'):  # for doc generation
@@ -147,6 +149,7 @@ class CocoDataset(CustomDataset):
                 continue
             if ann['category_id'] not in self.cat_ids:
                 continue
+            # 左下右上角点?
             bbox = [x1, y1, x1 + w, y1 + h]
             if ann.get('iscrowd', False):
                 gt_bboxes_ignore.append(bbox)

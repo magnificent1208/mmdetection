@@ -20,6 +20,7 @@ from .jsxs import JSXSDataset
 from .bj import BJDataset
 from .byq import BYQDataset
 from .sbqs import SBQSDataset
+from .aircraft import RAIRCRAFTDataset
 
 
 __all__ = [
@@ -30,5 +31,5 @@ __all__ = [
     'ClassBalancedDataset', 'WIDERFaceDataset', 'DATASETS', 'PIPELINES',
     'build_dataset', 'replace_ImageToTensor',
     'TunnelObjDataset', 'TunnelRotDataset', 'Sim311Dataset', 
-    'JSXSDataset', 'BJDataset', 'BYQDataset', 'SBQSDataset'
+    'JSXSDataset', 'BJDataset', 'BYQDataset', 'SBQSDataset', 'RAIRCRAFTDataset'
 ]

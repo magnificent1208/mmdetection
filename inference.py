@@ -12,9 +12,8 @@ from mmdet.apis import init_detector, inference_detector
 # img_dir = './'
 
 # DOTA plot
-imgs = ['P1446_1600_1046.png', 'P1139_4800_3200.png', 'P0122_490_556.png', 'P2552_800_1947.png', 'P1308_3000_4000.png', 'P1509_2076_3200.png', 
+imgs = ['P1446_1600_1046.png', 'P1139_4800_3200.png', 'P0122_490_556.png', 'P2552_800_1947.png', 'P1308_3000_4000.png', 'P1509_2076_3200.png',
         'P0236_450_313.png', 'P0896_1438_800.png', 'P1413_2889_2400.png']
-
 img_dir = './data/dota/train/JPEGImages/'
 work_dir_path = 'centernet_hrnet_0204'
 dataset = 'dota'
@@ -34,8 +33,13 @@ dataset = 'dota'
 # work_dir_path = 'faster_rcnn_512'
 # dataset = 'byq'
 
+# imgs = ['001.jpg', '011.jpg', '021.jpg', '031.jpg', '041.jpg']
+# img_dir = 'data/r_aircraft/JPEGImages/'
+# dataset = 'rot_ttfnet'
+# work_dir_path = 'ttfnet18_1x'
+
 device = 'cuda'
-thr = 0.0
+thr = 0.3
 
 def find_py(dir_path):
     file_names = os.listdir(dir_path)

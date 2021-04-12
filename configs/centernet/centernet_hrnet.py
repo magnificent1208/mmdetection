@@ -1,6 +1,6 @@
 model = dict(
     type='CenterNet',
-    pretrained='open-mmlab://msra/hrnetv2_w32',    
+    # pretrained='open-mmlab://msra/hrnetv2_w32',
     backbone=dict(
         type='HRNet',
         extra=dict(
@@ -98,8 +98,10 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    samples_per_gpu=6,
-    workers_per_gpu=3,
+    # samples_per_gpu=6,
+    # workers_per_gpu=3,
+    samples_per_gpu=1,
+    workers_per_gpu=1,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'train/ImageSets/Main/train.txt',
